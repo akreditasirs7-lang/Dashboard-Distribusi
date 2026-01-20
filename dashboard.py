@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import time
 import altair as alt
 
 # =========================
@@ -41,7 +40,7 @@ def load_data():
     df = pd.read_csv(url)
     df = df.iloc[:, :10]
     df.columns = [col.strip() for col in df.columns]
-    # Gabungkan kolom Bulan dan Tahun jadi datetime (kalau ada)
+    # Gabungkan Bulan + Tahun jadi periode
     if 'Bulan' in df.columns and 'Tahun' in df.columns:
         df['Periode'] = df['Bulan'].astype(str) + " " + df['Tahun'].astype(str)
     return df
@@ -108,7 +107,6 @@ with col3:
 # =========================
 st.markdown("### 📊 Visualisasi Data")
 
-# Kolom 1 dan 2
 col4, col5 = st.columns(2)
 with col4:
     st.markdown("#### 🔸 Jumlah per Jenis Permintaan")
@@ -119,33 +117,36 @@ with col5:
         st.markdown("#### 🩸 Distribusi Golongan Darah")
         st.bar_chart(df_filtered['Golongan Darah'].value_counts())
 
-# Chart RS/Klinik
 st.markdown("#### 🏥 Top 15 RS/Klinik Tujuan")
 if 'Droping RS/Klinik Tujuan' in df_filtered.columns:
     tujuan_counts = df_filtered['Droping RS/Klinik Tujuan'].value_counts().head(15)
     st.bar_chart(tujuan_counts)
 
 # =========================
-# 📅 TREND BULANAN
+# 📅 TREN BULANAN PER RS/KLINIK TUJUAN
 # =========================
-if 'Periode' in df_filtered.columns and 'Jenis Permintaan' in df_filtered.columns:
-    st.markdown("### 📆 Tren Bulanan Droping vs Non Droping")
-    df_trend = (
-        df_filtered.groupby(['Periode', 'Jenis Permintaan'])
+if 'Periode' in df_filtered.columns and 'Droping RS/Klinik Tujuan' in df_filtered.columns:
+    st.markdown("### 📆 Tren Bulanan Berdasarkan RS/Klinik Tujuan")
+    df_trend_rs = (
+        df_filtered.groupby(['Periode', 'Droping RS/Klinik Tujuan'])
         .size()
         .reset_index(name='Jumlah')
         .sort_values('Periode')
     )
+    # Ambil hanya 10 RS/Klinik teratas biar gak ramai
+    top_rs = df_trend_rs['Droping RS/Klinik Tujuan'].value_counts().head(10).index
+    df_trend_rs = df_trend_rs[df_trend_rs['Droping RS/Klinik Tujuan'].isin(top_rs)]
+
     chart = (
-        alt.Chart(df_trend)
+        alt.Chart(df_trend_rs)
         .mark_line(point=True)
         .encode(
-            x='Periode:N',
-            y='Jumlah:Q',
-            color='Jenis Permintaan:N',
-            tooltip=['Periode', 'Jenis Permintaan', 'Jumlah']
+            x=alt.X('Periode:N', title="Bulan"),
+            y=alt.Y('Jumlah:Q', title="Jumlah Droping"),
+            color=alt.Color('Droping RS/Klinik Tujuan:N', title="RS/Klinik"),
+            tooltip=['Periode', 'Droping RS/Klinik Tujuan', 'Jumlah']
         )
-        .properties(width=900, height=400)
+        .properties(width=950, height=450)
     )
     st.altair_chart(chart, use_container_width=True)
 
@@ -169,10 +170,22 @@ if 'Komponen' in df_filtered.columns:
     st.altair_chart(pie_chart, use_container_width=True)
 
 # =========================
+# 🌗 DARK MODE TOGGLE
+# =========================
+st.sidebar.markdown("---")
+dark_mode = st.sidebar.checkbox("🌙 Aktifkan Mode Gelap")
+
+if dark_mode:
+    st.markdown("""
+        <style>
+            body {background-color: #1E1E1E; color: white;}
+            .metric-box {background-color: #2D2D2D; color: #EAEAEA;}
+            .big-font {color: #58D68D;}
+        </style>
+    """, unsafe_allow_html=True)
+
+# =========================
 # 🧾 FOOTER
 # =========================
 st.markdown("---")
 st.caption("📡 Auto-refresh setiap 30 detik dari Google Sheets | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
-
-
-
