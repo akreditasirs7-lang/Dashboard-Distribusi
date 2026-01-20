@@ -6,10 +6,6 @@ import altair as alt
 # 🎨 PAGE CONFIG
 # =========================
 st.set_page_config(page_title="Dashboard Droping vs Non Droping", layout="wide", page_icon="💉")
-
-# =========================
-# 🌙 DARK MODE ELEGAN STYLE
-# =========================
 st.markdown("""
     <style>
         html, body, [class*="css"] {
@@ -128,7 +124,7 @@ st.markdown("### 📊 Visualisasi Data")
 
 col4, col5 = st.columns(2)
 with col4:
-    st.markdown("#### 🔸 Jumlah per Jenis Permintaan")
+    st.markdown("#### 🔸 Jumlah Distribusi")
     st.bar_chart(df_filtered['Jenis Permintaan'].value_counts())
 
 with col5:
@@ -202,3 +198,4 @@ if 'Komponen' in df_filtered.columns:
 # =========================
 st.markdown("---")
 st.caption("📡 Auto-refresh setiap 30 detik | Dark Mode Elegan | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
+
