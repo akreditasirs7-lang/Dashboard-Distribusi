@@ -109,7 +109,7 @@ st.markdown("### 📊 Visualisasi Data")
 
 col4, col5 = st.columns(2)
 with col4:
-    st.markdown("#### 🔸 Jumlah per Jenis Permintaan")
+    st.markdown("#### 🔸 Jumlah Distribusi")
     st.bar_chart(df_filtered['Jenis Permintaan'].value_counts())
 
 with col5:
@@ -189,3 +189,4 @@ if dark_mode:
 # =========================
 st.markdown("---")
 st.caption("📡 Auto-refresh setiap 30 detik dari Google Sheets | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
+
