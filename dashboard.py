@@ -111,7 +111,7 @@ st.markdown("### 📊 Visualisasi Data")
 # Kolom 1 dan 2
 col4, col5 = st.columns(2)
 with col4:
-    st.markdown("#### 🔸 Jumlah per Jenis Distribusi")
+    st.markdown("#### 🔸 Jumlah per Jenis Permintaan")
     st.bar_chart(df_filtered['Jenis Distribusi'].value_counts())
 
 with col5:
@@ -173,4 +173,5 @@ if 'Komponen' in df_filtered.columns:
 # =========================
 st.markdown("---")
 st.caption("📡 Auto-refresh setiap 30 detik dari Google Sheets | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
+
 
