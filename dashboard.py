@@ -19,6 +19,11 @@ st.markdown("""
         }
         h1,h2,h3,h4 {color:#58a6ff;}
         .stDataFrame {border-radius: 10px;}
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #9CDCFE;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -43,15 +48,17 @@ df = load_data()
 # =========================
 # 🧠 FILTER DATA
 # =========================
-st.sidebar.header("🎛️ Filter Data")
+st.sidebar.markdown('<p class="sidebar-title">🎛️ Filter Data</p>', unsafe_allow_html=True)
 
+# Jenis Distribusi
 jenis_list = df['Jenis Permintaan'].dropna().unique().tolist()
 jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
 
+# Jenis Formulir
 form_list = df['Jenis Pengimputan'].dropna().unique().tolist()
 form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
-# 🔹 FILTER UTAMA RS/KLINIK TUJUAN
+# RS/Klinik Tujuan (utama)
 if 'Droping RS/Klinik Tujuan' in df.columns:
     rs_list = sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist())
     select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik Tujuan", value=True)
@@ -62,20 +69,29 @@ if 'Droping RS/Klinik Tujuan' in df.columns:
 else:
     rs_filter = []
 
-# 🔹 FILTER TAMBAHAN “MENURUT RS/KLINIK TUJUAN”
+# =========================
+# 🧭 FILTER MENURUT BULAN (UBAH NAMA)
+# =========================
 st.sidebar.markdown("---")
-st.sidebar.subheader("🏥 Filter Menurut RS/Klinik Tujuan")
+st.sidebar.markdown('<p class="sidebar-title">🗓️ Filter Menurut Bulan</p>', unsafe_allow_html=True)
+
+bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
+bulan_filter = st.sidebar.multiselect("Pilih Bulan:", bulan_list, default=bulan_list)
+
+# =========================
+# 🏥 FILTER TAMBAHAN MENURUT RS/KLINIK TUJUAN (BARU)
+# =========================
+st.sidebar.markdown("---")
+st.sidebar.markdown('<p class="sidebar-title">🏥 Filter Menurut RS/Klinik Tujuan</p>', unsafe_allow_html=True)
+
 if 'Droping RS/Klinik Tujuan' in df.columns:
     rs_filter_extra = st.sidebar.multiselect(
-        "Pilih RS/Klinik untuk Analisis Tambahan:",
+        "Pilih RS/Klinik (Tambahan):",
         options=sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist()),
         default=[]
     )
 else:
     rs_filter_extra = []
-
-bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
-bulan_filter = st.sidebar.multiselect("Bulan:", bulan_list, default=bulan_list)
 
 # =========================
 # 🧩 LOGIKA FILTER
@@ -85,7 +101,7 @@ df_filtered = df[
     (df['Jenis Pengimputan'].isin(form_filter))
 ]
 
-# Gabungkan dua filter RS (utama + tambahan)
+# Gabungkan dua filter RS
 if rs_filter or rs_filter_extra:
     combined_rs = list(set(rs_filter + rs_filter_extra))
     df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(combined_rs)]
@@ -226,6 +242,7 @@ st.subheader("🏥 Tabel & Grafik RS/Klinik Tujuan (Top 20)")
 if 'Droping RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     df_rs = df_filtered.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
     df_rs = df_rs.sort_values('Jumlah', ascending=False)
+
     col1, col2 = st.columns([1, 1.5])
     with col1:
         st.dataframe(df_rs.head(20), use_container_width=True, height=400)
