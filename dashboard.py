@@ -8,9 +8,9 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 
 # =========================
-# ⚙️ KONFIGURASI
+# ⚙️ KONFIGURASI DASAR
 # =========================
-st.set_page_config(page_title="Dashboard Darah 2025–2026", layout="wide", page_icon="💉")
+st.set_page_config(page_title="Dashboard Perbandingan Permintaan vs Pemenuhan 2025–2026", layout="wide", page_icon="💉")
 
 # =========================
 # 🎨 PILIHAN TEMA
@@ -26,25 +26,29 @@ tema_style = {
         "background": "linear-gradient(135deg, #f8cdda 0%, #1d2b64 100%)",
         "text_color": "#fefefe",
         "title_color": "#ffe5ec",
-        "bar_colors": ["#00c4ff", "#33FF99", "#FF7F50", "#4FC3F7", "#FF6B6B"]
+        "permintaan_color": "#ff5f6d",
+        "pemenuhan_color": "#36cfc9",
     },
     "Biru–Toska": {
         "background": "linear-gradient(135deg, #00b4db 0%, #0083b0 100%)",
         "text_color": "#f9f9f9",
         "title_color": "#e0ffff",
-        "bar_colors": ["#ffcc00", "#00ffff", "#ff6699", "#33ff99", "#ff9966"]
+        "permintaan_color": "#ffcc00",
+        "pemenuhan_color": "#00ffff",
     },
     "Dark Mode": {
         "background": "#0e1117",
         "text_color": "#fafafa",
         "title_color": "#58a6ff",
-        "bar_colors": ["#1f77b4", "#2ca02c", "#d62728", "#9467bd", "#ff7f0e"]
+        "permintaan_color": "#ff7f0e",
+        "pemenuhan_color": "#1f77b4",
     },
     "Kuning–Oranye": {
         "background": "linear-gradient(135deg, #f9d423 0%, #ff4e50 100%)",
         "text_color": "#222",
         "title_color": "#fff3cd",
-        "bar_colors": ["#f5b700", "#ff8c00", "#f3722c", "#f94144", "#90be6d"]
+        "permintaan_color": "#ff8c00",
+        "pemenuhan_color": "#f3722c",
     }
 }
 
@@ -57,17 +61,6 @@ st.markdown(f"""
         }}
         h1,h2,h3,h4 {{
             color: {theme['title_color']};
-        }}
-        .sidebar-title {{
-            font-size: 18px;
-            font-weight: 700;
-            color: {theme['title_color']};
-        }}
-        .stButton>button {{
-            background-color: #ffffff22 !important;
-            color: {theme['text_color']} !important;
-            font-weight: bold;
-            border-radius: 8px;
         }}
     </style>
 """, unsafe_allow_html=True)
@@ -103,13 +96,10 @@ tahun_pilihan = st.sidebar.multiselect("📆 Pilih Tahun:", [2025, 2026], defaul
 df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
 
 # =========================
-# 🧠 FILTER
+# 🎛️ FILTER DATA
 # =========================
 jenis_list = df["Jenis Permintaan"].dropna().unique().tolist()
 jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
-
-form_list = df["Jenis Pengimputan"].dropna().unique().tolist()
-form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
 rs_list = sorted(df["RS/Klinik Tujuan"].dropna().unique().tolist())
 rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", rs_list, default=rs_list)
@@ -117,12 +107,8 @@ rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", rs_list, default=rs_list
 bulan_list = sorted(df["Bulan"].dropna().unique().tolist())
 bulan_filter = st.sidebar.multiselect("🗓️ Pilih Bulan:", bulan_list, default=bulan_list)
 
-# =========================
-# FILTER DATA
-# =========================
 df_filtered = df[
     df["Jenis Permintaan"].isin(jenis_filter)
-    & df["Jenis Pengimputan"].isin(form_filter)
     & df["RS/Klinik Tujuan"].isin(rs_filter)
     & df["Bulan"].isin(bulan_filter)
 ]
@@ -130,13 +116,113 @@ df_filtered = df[
 # =========================
 # 🧾 HEADER
 # =========================
-st.title("💉 Dashboard Distribusi & Pelayanan Darah 2025–2026")
-st.markdown("#### Analisis Droping, Permintaan & Pemenuhan | Real-time dari Google Sheets")
+st.title("💉 Dashboard Perbandingan Jenis Permintaan vs Pemenuhan (2025–2026)")
+st.markdown("#### Analisis Real-time dari Google Sheets")
 st.markdown("---")
 
 # =========================
-# 📥 DOWNLOAD EXCEL
+# 📊 GRAFIK PERBANDINGAN PERMINTAAN vs PEMENUHAN
 # =========================
+st.subheader("📈 Perbandingan Jenis Permintaan vs Pemenuhan per Tahun")
+
+if "Jenis Pengimputan" in df_filtered.columns and "Jumlah" in df_filtered.columns:
+    df_compare = (
+        df_filtered.groupby(["Tahun", "Jenis Pengimputan"])["Jumlah"]
+        .sum()
+        .reset_index()
+    )
+
+    chart_compare = (
+        alt.Chart(df_compare)
+        .mark_bar()
+        .encode(
+            x=alt.X("Tahun:N", title="Tahun"),
+            y=alt.Y("Jumlah:Q", title="Total Jumlah"),
+            color=alt.Color("Jenis Pengimputan:N",
+                            scale=alt.Scale(
+                                domain=["Permintaan", "Pemenuhan"],
+                                range=[theme['permintaan_color'], theme['pemenuhan_color']]
+                            )),
+            tooltip=["Tahun", "Jenis Pengimputan", "Jumlah"]
+        )
+        .properties(width=950, height=400, title="📊 Total Permintaan vs Pemenuhan per Tahun")
+    )
+    st.altair_chart(chart_compare, use_container_width=True)
+
+# =========================
+# 📈 TREND PERBANDINGAN
+# =========================
+if "Jumlah" in df_filtered.columns and "Bulan" in df_filtered.columns:
+    df_trend = (
+        df_filtered.groupby(["Tahun", "Bulan", "Jenis Pengimputan"], as_index=False)["Jumlah"]
+        .sum()
+        .sort_values(["Tahun", "Bulan"])
+    )
+
+    chart_trend = (
+        alt.Chart(df_trend)
+        .mark_line(point=True)
+        .encode(
+            x="Bulan:N",
+            y="Jumlah:Q",
+            color="Jenis Pengimputan:N",
+            strokeDash="Tahun:N",
+            tooltip=["Tahun", "Bulan", "Jenis Pengimputan", "Jumlah"],
+        )
+        .properties(width=950, height=400, title="📈 Trend Bulanan Permintaan vs Pemenuhan (2025–2026)")
+    )
+    st.altair_chart(chart_trend, use_container_width=True)
+
+# =========================
+# 🧪 PERBANDINGAN MENURUT KOMPONEN
+# =========================
+if "Komponen" in df_filtered.columns:
+    df_komp = (
+        df_filtered.groupby(["Tahun", "Jenis Pengimputan", "Komponen"])["Jumlah"]
+        .sum()
+        .reset_index()
+    )
+    chart_komp = (
+        alt.Chart(df_komp)
+        .mark_bar()
+        .encode(
+            x="Komponen:N",
+            y="Jumlah:Q",
+            color="Jenis Pengimputan:N",
+            column="Tahun:N",
+            tooltip=["Tahun", "Komponen", "Jenis Pengimputan", "Jumlah"]
+        )
+        .properties(title="🧪 Distribusi Komponen Berdasarkan Jenis Permintaan vs Pemenuhan")
+    )
+    st.altair_chart(chart_komp, use_container_width=True)
+
+# =========================
+# 🩸 PERBANDINGAN MENURUT GOLONGAN DARAH
+# =========================
+if "Golongan Darah" in df_filtered.columns:
+    df_goldar = (
+        df_filtered.groupby(["Tahun", "Jenis Pengimputan", "Golongan Darah"])["Jumlah"]
+        .sum()
+        .reset_index()
+    )
+    chart_goldar = (
+        alt.Chart(df_goldar)
+        .mark_bar()
+        .encode(
+            x="Golongan Darah:N",
+            y="Jumlah:Q",
+            color="Jenis Pengimputan:N",
+            column="Tahun:N",
+            tooltip=["Tahun", "Golongan Darah", "Jenis Pengimputan", "Jumlah"]
+        )
+        .properties(title="🩸 Perbandingan Golongan Darah (Permintaan vs Pemenuhan)")
+    )
+    st.altair_chart(chart_goldar, use_container_width=True)
+
+# =========================
+# 📥 DOWNLOAD DATA
+# =========================
+st.subheader("📦 Download Data Terfilter")
 output = BytesIO()
 with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
     df_filtered.to_excel(writer, index=False, sheet_name="Data Terfilter")
@@ -144,104 +230,9 @@ with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
 st.download_button(
     label="⬇️ Download Data (Excel)",
     data=output.getvalue(),
-    file_name=f"data_terfilter_{'_'.join(map(str, tahun_pilihan))}.xlsx",
+    file_name="data_permintaan_pemenuhan_2025_2026.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
-
-# =========================
-# 📤 DOWNLOAD PDF
-# =========================
-if st.button("📄 Download Ringkasan (PDF)"):
-    pdf_buffer = BytesIO()
-    c = canvas.Canvas(pdf_buffer, pagesize=A4)
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(2*cm, 27*cm, f"Laporan Dashboard Distribusi Darah {', '.join(map(str, tahun_pilihan))}")
-    c.setFont("Helvetica", 10)
-    c.drawString(2*cm, 26.4*cm, f"Total Data: {len(df_filtered)} baris")
-
-    y = 25*cm
-    for name, df_part in [("RS/Klinik Tujuan", df_filtered['RS/Klinik Tujuan'].value_counts().head(5)),
-                          ("Komponen", df_filtered['Komponen'].value_counts().head(5)),
-                          ("Golongan Darah", df_filtered['Golongan Darah'].value_counts().head(5)),
-                          ("Rhesus", df_filtered['Rhesus'].value_counts().head(5))]:
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(2*cm, y, f"{name}")
-        y -= 0.5*cm
-        c.setFont("Helvetica", 10)
-        for item, val in df_part.items():
-            c.drawString(2.5*cm, y, f"• {item}: {val}")
-            y -= 0.4*cm
-        y -= 0.5*cm
-        if y < 4*cm:
-            c.showPage()
-            y = 26*cm
-    c.save()
-    st.download_button(
-        label="📥 Download Laporan PDF",
-        data=pdf_buffer.getvalue(),
-        file_name="Laporan_Darah_2025_2026.pdf",
-        mime="application/pdf"
-    )
-
-# =========================
-# 📊 CHART FUNCTION
-# =========================
-def chart_with_label(data, x, y, title, color):
-    base = (
-        alt.Chart(data)
-        .mark_bar(color=color)
-        .encode(x=alt.X(f"{x}:N", sort='-y'), y=alt.Y(f"{y}:Q"), tooltip=[x, y])
-        .properties(width=950, height=400, title=title)
-    )
-    text = (
-        alt.Chart(data)
-        .mark_text(align="center", baseline="bottom", dy=-8, color="#111", fontSize=13, fontWeight="bold")
-        .encode(x=f"{x}:N", y=f"{y}:Q", text=f"{y}:Q")
-    )
-    return (base + text).interactive()
-
-# =========================
-# 📈 TREND PERBANDINGAN
-# =========================
-if "Jumlah" in df_filtered.columns and "Bulan" in df_filtered.columns:
-    df_trend = (
-        df_filtered.groupby(["Tahun", "Bulan"], as_index=False)["Jumlah"]
-        .sum()
-        .sort_values(["Tahun", "Bulan"])
-    )
-    chart = (
-        alt.Chart(df_trend)
-        .mark_line(point=True)
-        .encode(
-            x="Bulan:N",
-            y="Jumlah:Q",
-            color="Tahun:N",
-            tooltip=["Tahun", "Bulan", "Jumlah"],
-        )
-        .properties(width=950, height=400, title="📈 Trend Bulanan Perbandingan 2025 vs 2026")
-    )
-    st.altair_chart(chart, use_container_width=True)
-
-# =========================
-# 📊 GRAFIK DETAIL
-# =========================
-colors = theme["bar_colors"]
-
-if "RS/Klinik Tujuan" in df_filtered.columns:
-    df_rs = df_filtered.groupby(["Tahun", "RS/Klinik Tujuan"])["Jumlah"].sum().reset_index()
-    st.altair_chart(chart_with_label(df_rs, "RS/Klinik Tujuan", "Jumlah", "🏥 Distribusi RS/Klinik Tujuan", colors[0]))
-
-if "Komponen" in df_filtered.columns:
-    df_komp = df_filtered.groupby(["Tahun", "Komponen"])["Jumlah"].sum().reset_index()
-    st.altair_chart(chart_with_label(df_komp, "Komponen", "Jumlah", "🧪 Distribusi Komponen", colors[1]))
-
-if "Golongan Darah" in df_filtered.columns:
-    df_goldar = df_filtered.groupby(["Tahun", "Golongan Darah"])["Jumlah"].sum().reset_index()
-    st.altair_chart(chart_with_label(df_goldar, "Golongan Darah", "Jumlah", "🩸 Golongan Darah", colors[2]))
-
-if "Rhesus" in df_filtered.columns:
-    df_rhesus = df_filtered.groupby(["Tahun", "Rhesus"])["Jumlah"].sum().reset_index()
-    st.altair_chart(chart_with_label(df_rhesus, "Rhesus", "Jumlah", "🧬 Distribusi Rhesus", colors[3]))
 
 # =========================
 # 📋 DATA TABLE
@@ -250,7 +241,6 @@ st.subheader("📋 Data Input (10 Baris per Halaman)")
 page_size = 10
 total_rows = len(df_filtered)
 total_pages = math.ceil(total_rows / page_size)
-
 if "page_number" not in st.session_state:
     st.session_state.page_number = 1
 
@@ -273,4 +263,4 @@ else:
     st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
 
 st.markdown("---")
-st.caption("📅 Dashboard Lengkap 2025–2026 | 🎨 Multi-Tema | Download Excel & PDF | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
+st.caption("📊 Dashboard Perbandingan Permintaan vs Pemenuhan 2025–2026 | 🎨 Multi-Tema | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
