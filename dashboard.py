@@ -3,6 +3,9 @@ import pandas as pd
 import altair as alt
 from io import BytesIO
 import math
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import cm
 
 # =========================
 # 🎨 KONFIGURASI HALAMAN
@@ -24,8 +27,13 @@ st.markdown("""
             font-weight: 700;
             color: #9CDCFE;
         }
-        table {
-            color: white !important;
+        table { color: white !important; }
+        .toggle-box {
+            background-color: #1e1e1e;
+            border: 1px solid #333;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -72,7 +80,7 @@ bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
 bulan_filter = st.sidebar.multiselect("Pilih Bulan:", bulan_list, default=bulan_list)
 
 # =========================
-# 🧩 LOGIKA FILTER
+# 🧩 FILTER LOGIKA
 # =========================
 df_filtered = df.copy()
 df_filtered = df_filtered[df_filtered['Jenis Permintaan'].isin(jenis_filter)]
@@ -81,7 +89,7 @@ df_filtered = df_filtered[df_filtered['RS/Klinik Tujuan'].isin(rs_filter)]
 df_filtered = df_filtered[df_filtered['Bulan'].isin(bulan_filter)]
 
 # =========================
-# 🕒 INFO DATA TERAKHIR
+# 🕒 INFO TERAKHIR
 # =========================
 if 'Tanggal Droping' in df.columns:
     last_date = df['Tanggal Droping'].max()
@@ -100,14 +108,12 @@ st.markdown("---")
 # =========================
 st.subheader("📦 Download Data Terfilter")
 output = BytesIO()
-with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-    df_filtered.to_excel(writer, index=False, sheet_name='Data Terfilter')
-    writer.save()
-excel_data = output.getvalue()
+with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+    df_filtered.to_excel(writer, index=False, sheet_name="Data Terfilter")
 
 st.download_button(
     label="⬇️ Download Data (Excel)",
-    data=excel_data,
+    data=output.getvalue(),
     file_name="data_terfilter.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
@@ -115,106 +121,97 @@ st.download_button(
 # =========================
 # 🧭 TOGGLE GRAFIK
 # =========================
+st.markdown('<div class="toggle-box">', unsafe_allow_html=True)
 show_graphs = st.toggle("🧭 Tampilkan Semua Grafik", value=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
 # 📊 GRAFIK-GRAFIK
 # =========================
 if show_graphs:
-    # ---- TREND BULANAN ----
-    st.subheader("📊 Trend Bulanan (Total Jumlah)")
-    if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
-        df_trend = df_filtered.groupby('Periode', as_index=False)['Jumlah'].sum().sort_values('Periode')
-        if len(df_trend) > 0:
-            chart_trend = (
-                alt.Chart(df_trend)
-                .mark_line(point=True, color='#00c4ff')
-                .encode(
-                    x=alt.X('Periode:N', title='Periode (Bulan)'),
-                    y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-                    tooltip=['Periode', 'Jumlah']
-                )
-                .properties(width=950, height=350)
+    def chart_with_label(data, x, y, title, color):
+        chart = (
+            alt.Chart(data)
+            .mark_bar(color=color)
+            .encode(
+                x=alt.X(f"{x}:N", sort='-y', title=x),
+                y=alt.Y(f"{y}:Q", title="Total Jumlah"),
+                tooltip=[x, y],
             )
-            st.altair_chart(chart_trend, use_container_width=True)
+            .properties(width=950, height=400, title=title)
+        )
+        text = chart.mark_text(align="center", baseline="bottom", dy=-5, color="white").encode(
+            text=alt.Text(f"{y}:Q")
+        )
+        return chart + text
 
-    # ---- DISTRIBUSI RS/KLINIK ----
-    st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan (Total Jumlah)")
-    if 'RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
+    # Grafik utama
+    charts = []
+    if 'Periode' in df_filtered.columns:
+        df_trend = df_filtered.groupby('Periode', as_index=False)['Jumlah'].sum().sort_values('Periode')
+        charts.append(("Trend Bulanan", chart_with_label(df_trend, 'Periode', 'Jumlah', "📊 Trend Bulanan", "#00c4ff")))
+
+    if 'RS/Klinik Tujuan' in df_filtered.columns:
         df_rs = df_filtered.groupby('RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
         df_rs = df_rs.sort_values('Jumlah', ascending=False)
-        chart_rs = (
-            alt.Chart(df_rs)
-            .mark_bar(color="#33FF99")
-            .encode(
-                x=alt.X('RS/Klinik Tujuan:N', sort='-y', title='RS/Klinik Tujuan'),
-                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-                tooltip=['RS/Klinik Tujuan', 'Jumlah']
-            )
-            .properties(width=950, height=400)
-        )
-        st.altair_chart(chart_rs, use_container_width=True)
+        charts.append(("RS/Klinik Tujuan", chart_with_label(df_rs, 'RS/Klinik Tujuan', 'Jumlah', "🏥 Distribusi RS/Klinik", "#33FF99")))
 
-    # ---- DISTRIBUSI KOMPONEN ----
-    st.subheader("🧪 Distribusi Menurut Komponen")
     if 'Komponen' in df_filtered.columns:
         df_komp = df_filtered.groupby('Komponen')['Jumlah'].sum().reset_index()
-        chart_komp = (
-            alt.Chart(df_komp)
-            .mark_bar(color="#FF7F50")
-            .encode(
-                x=alt.X('Komponen:N', sort='-y', title='Komponen'),
-                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-                tooltip=['Komponen', 'Jumlah']
-            )
-            .properties(width=950, height=400)
-        )
-        text_komp = chart_komp.mark_text(
-            align='center', baseline='bottom', dy=-5, color='white'
-        ).encode(text=alt.Text('Jumlah:Q'))
-        st.altair_chart(chart_komp + text_komp, use_container_width=True)
+        charts.append(("Komponen", chart_with_label(df_komp, 'Komponen', 'Jumlah', "🧪 Distribusi Komponen", "#FF7F50")))
 
-    # ---- DISTRIBUSI GOLONGAN DARAH ----
-    st.subheader("🩸 Distribusi Menurut Golongan Darah")
     if 'Golongan Darah' in df_filtered.columns:
         df_goldar = df_filtered.groupby('Golongan Darah')['Jumlah'].sum().reset_index()
-        chart_goldar = (
-            alt.Chart(df_goldar)
-            .mark_bar(color="#4FC3F7")
-            .encode(
-                x=alt.X('Golongan Darah:N', sort='-y', title='Golongan Darah'),
-                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-                tooltip=['Golongan Darah', 'Jumlah']
-            )
-            .properties(width=950, height=400)
-        )
-        text_goldar = chart_goldar.mark_text(
-            align='center', baseline='bottom', dy=-5, color='white'
-        ).encode(text=alt.Text('Jumlah:Q'))
-        st.altair_chart(chart_goldar + text_goldar, use_container_width=True)
+        charts.append(("Golongan Darah", chart_with_label(df_goldar, 'Golongan Darah', 'Jumlah', "🩸 Golongan Darah", "#4FC3F7")))
 
-    # ---- DISTRIBUSI RHESUS ----
-    st.subheader("🧬 Distribusi Rhesus (Positif vs Negatif)")
     if 'Rhesus' in df_filtered.columns:
         df_rhesus = df_filtered.groupby('Rhesus')['Jumlah'].sum().reset_index()
-        chart_rhesus = (
-            alt.Chart(df_rhesus)
-            .mark_bar()
-            .encode(
-                x=alt.X('Rhesus:N', title='Rhesus'),
-                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-                color=alt.Color('Rhesus:N', scale=alt.Scale(domain=['Positif', 'Negatif'], range=['#FF6B6B', '#4FC3F7'])),
-                tooltip=['Rhesus', 'Jumlah']
-            )
-            .properties(width=950, height=400)
-        )
-        text_rhesus = chart_rhesus.mark_text(
-            align='center', baseline='bottom', dy=-5, color='white'
-        ).encode(text=alt.Text('Jumlah:Q'))
-        st.altair_chart(chart_rhesus + text_rhesus, use_container_width=True)
+        charts.append(("Rhesus", chart_with_label(df_rhesus, 'Rhesus', 'Jumlah', "🧬 Rhesus", "#FF6B6B")))
+
+    for title, chart in charts:
+        st.altair_chart(chart, use_container_width=True)
 
 # =========================
-# 📋 DATA INPUT TERBARU
+# 📤 EXPORT SEMUA GRAFIK KE PDF
+# =========================
+st.subheader("📤 Export Semua Grafik ke PDF")
+
+if st.button("📄 Buat Laporan PDF"):
+    pdf_buffer = BytesIO()
+    c = canvas.Canvas(pdf_buffer, pagesize=A4)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(2*cm, 27*cm, "Laporan Dashboard Distribusi Darah 2026")
+    c.setFont("Helvetica", 10)
+    c.drawString(2*cm, 26.4*cm, f"Total Data: {len(df_filtered)} baris")
+    c.drawString(2*cm, 26.0*cm, f"Terakhir Diperbarui: {pd.Timestamp.now().strftime('%d %B %Y, %H:%M')}")
+
+    y = 25*cm
+    for name, df_part in [("RS/Klinik Tujuan", df_filtered['RS/Klinik Tujuan'].value_counts().head(5)),
+                          ("Komponen", df_filtered['Komponen'].value_counts().head(5)),
+                          ("Golongan Darah", df_filtered['Golongan Darah'].value_counts().head(5)),
+                          ("Rhesus", df_filtered['Rhesus'].value_counts().head(5))]:
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(2*cm, y, f"{name}")
+        y -= 0.5*cm
+        c.setFont("Helvetica", 10)
+        for item, val in df_part.items():
+            c.drawString(2.5*cm, y, f"• {item}: {val}")
+            y -= 0.4*cm
+        y -= 0.5*cm
+        if y < 4*cm:
+            c.showPage()
+            y = 26*cm
+    c.save()
+
+    st.download_button(
+        label="📥 Download Laporan PDF",
+        data=pdf_buffer.getvalue(),
+        file_name="Laporan_Dashboard_Darah.pdf",
+        mime="application/pdf"
+    )
+
+# =========================
+# 📋 DATA TABLE
 # =========================
 st.subheader("📋 Data Input Terbaru (10 Baris per Halaman)")
 page_size = 10
@@ -244,8 +241,5 @@ if total_rows > 0:
 else:
     st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
 
-# =========================
-# 🧾 FOOTER
-# =========================
 st.markdown("---")
 st.caption("📡 Auto-refresh setiap 30 detik | Dark Mode Profesional | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
