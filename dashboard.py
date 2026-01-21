@@ -4,7 +4,7 @@ import altair as alt
 from io import StringIO
 
 # =========================
-# 🎨 CONFIGURASI HALAMAN
+# 🎨 KONFIGURASI HALAMAN
 # =========================
 st.set_page_config(page_title="Dashboard Distribusi Darah", layout="wide", page_icon="💉")
 
@@ -50,41 +50,35 @@ def load_data():
 df = load_data()
 
 # =========================
-# 🧠 FILTER UTAMA
+# 🧠 FILTER DATA
 # =========================
-st.sidebar.header("🎛️ Filter Data Umum")
+st.sidebar.header("🎛️ Filter Data")
 
+# Jenis Distribusi
 jenis_list = df['Jenis Permintaan'].dropna().unique().tolist()
 jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
 
+# Jenis Formulir
 form_list = df['Jenis Pengimputan'].dropna().unique().tolist()
 form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
+# RS/Klinik Tujuan (utama & lebih interaktif)
 if 'Droping RS/Klinik Tujuan' in df.columns:
-    rs_list = df['Droping RS/Klinik Tujuan'].dropna().unique().tolist()
-    rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", rs_list, default=rs_list)
+    rs_list = sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist())
+    select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik", value=True)
+    if select_all:
+        rs_filter = rs_list
+    else:
+        rs_filter = st.sidebar.multiselect("Pilih RS/Klinik Tujuan:", rs_list, default=[])
 else:
     rs_filter = []
 
-bulan_list = df['Bulan'].dropna().unique().tolist()
+# Bulan
+bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
 bulan_filter = st.sidebar.multiselect("Bulan:", bulan_list, default=bulan_list)
 
 # =========================
-# 🏥 FILTER KHUSUS “RUMAH SAKIT FOKUS”
-# =========================
-st.sidebar.markdown("---")
-st.sidebar.header("🏥 Filter Fokus Rumah Sakit / Klinik")
-if 'Droping RS/Klinik Tujuan' in df.columns:
-    rs_focus = st.sidebar.multiselect(
-        "Pilih RS/Klinik Fokus:",
-        options=sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist()),
-        default=[]
-    )
-else:
-    rs_focus = []
-
-# =========================
-# 🧩 FILTER DATA
+# 🧩 FILTER LOGIKA
 # =========================
 df_filtered = df[
     (df['Jenis Permintaan'].isin(jenis_filter)) &
@@ -95,8 +89,6 @@ if rs_filter:
     df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(rs_filter)]
 if bulan_filter:
     df_filtered = df_filtered[df_filtered['Bulan'].isin(bulan_filter)]
-if rs_focus:
-    df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(rs_focus)]
 
 # =========================
 # 🕒 INFO DATA TERAKHIR
@@ -117,7 +109,6 @@ st.markdown("---")
 # 📥 TOMBOL DOWNLOAD CSV
 # =========================
 st.subheader("📦 Download Data Terfilter")
-from io import StringIO
 csv_buffer = StringIO()
 df_filtered.to_csv(csv_buffer, index=False)
 st.download_button(
@@ -129,7 +120,7 @@ st.download_button(
 )
 
 # =========================
-# 📈 TREND BULANAN TOTAL
+# 📈 TREND BULANAN (TOTAL)
 # =========================
 st.subheader("📊 Trend Bulanan (Total Jumlah)")
 if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
@@ -189,7 +180,7 @@ if 'Komponen' in df_filtered.columns:
     st.altair_chart(chart_komp, use_container_width=True)
 
 # =========================
-# 🏥 DISTRIBUSI MENURUT RS/KLINIK TUJUAN
+# 🏥 DISTRIBUSI MENURUT RS/KLINIK TUJUAN (BAR)
 # =========================
 st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan (Total Jumlah)")
 if 'Droping RS/Klinik Tujuan' in df_filtered.columns:
