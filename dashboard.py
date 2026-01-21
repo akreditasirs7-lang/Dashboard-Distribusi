@@ -17,15 +17,6 @@ st.markdown("""
             background-color: #0e1117 !important;
             color: #fafafa !important;
         }
-        .big-font {font-size:22px; font-weight:600; color:#00c4ff;}
-        .metric-box {
-            background-color: #161b22;
-            border-radius: 8px;
-            padding: 10px;
-            text-align: center;
-            color: #e6e6e6;
-            box-shadow: 0px 0px 8px rgba(0, 255, 255, 0.2);
-        }
         h1,h2,h3,h4 {color:#58a6ff;}
         .stDataFrame {border-radius: 10px;}
     </style>
@@ -54,18 +45,16 @@ df = load_data()
 # =========================
 st.sidebar.header("🎛️ Filter Data")
 
-# Jenis Distribusi
 jenis_list = df['Jenis Permintaan'].dropna().unique().tolist()
 jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
 
-# Jenis Formulir
 form_list = df['Jenis Pengimputan'].dropna().unique().tolist()
 form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
-# RS/Klinik Tujuan (utama & lebih interaktif)
+# 🔹 FILTER UTAMA RS/KLINIK TUJUAN
 if 'Droping RS/Klinik Tujuan' in df.columns:
     rs_list = sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist())
-    select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik", value=True)
+    select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik Tujuan", value=True)
     if select_all:
         rs_filter = rs_list
     else:
@@ -73,20 +62,34 @@ if 'Droping RS/Klinik Tujuan' in df.columns:
 else:
     rs_filter = []
 
-# Bulan
+# 🔹 FILTER TAMBAHAN “MENURUT RS/KLINIK TUJUAN”
+st.sidebar.markdown("---")
+st.sidebar.subheader("🏥 Filter Menurut RS/Klinik Tujuan")
+if 'Droping RS/Klinik Tujuan' in df.columns:
+    rs_filter_extra = st.sidebar.multiselect(
+        "Pilih RS/Klinik untuk Analisis Tambahan:",
+        options=sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist()),
+        default=[]
+    )
+else:
+    rs_filter_extra = []
+
 bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
 bulan_filter = st.sidebar.multiselect("Bulan:", bulan_list, default=bulan_list)
 
 # =========================
-# 🧩 FILTER LOGIKA
+# 🧩 LOGIKA FILTER
 # =========================
 df_filtered = df[
     (df['Jenis Permintaan'].isin(jenis_filter)) &
     (df['Jenis Pengimputan'].isin(form_filter))
 ]
 
-if rs_filter:
-    df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(rs_filter)]
+# Gabungkan dua filter RS (utama + tambahan)
+if rs_filter or rs_filter_extra:
+    combined_rs = list(set(rs_filter + rs_filter_extra))
+    df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(combined_rs)]
+
 if bulan_filter:
     df_filtered = df_filtered[df_filtered['Bulan'].isin(bulan_filter)]
 
@@ -106,7 +109,7 @@ st.markdown("#### Analisis Droping, Permintaan & Pemenuhan | Real-time dari Goog
 st.markdown("---")
 
 # =========================
-# 📥 TOMBOL DOWNLOAD CSV
+# 📥 DOWNLOAD DATA
 # =========================
 st.subheader("📦 Download Data Terfilter")
 csv_buffer = StringIO()
@@ -115,8 +118,7 @@ st.download_button(
     label="⬇️ Download Data (CSV)",
     data=csv_buffer.getvalue(),
     file_name="data_terfilter.csv",
-    mime="text/csv",
-    help="Unduh data yang sudah difilter ke file CSV"
+    mime="text/csv"
 )
 
 # =========================
@@ -208,8 +210,8 @@ if 'Rhesus' in df_filtered.columns and 'Golongan Darah' in df_filtered.columns:
         alt.Chart(df_rh)
         .mark_bar()
         .encode(
-            x=alt.X('Golongan Darah:N', title='Golongan Darah'),
-            y=alt.Y('Jumlah:Q', title='Jumlah'),
+            x=alt.X('Golongan Darah:N'),
+            y=alt.Y('Jumlah:Q'),
             color=alt.Color('Rhesus:N', scale=alt.Scale(scheme='redblue')),
             tooltip=['Golongan Darah', 'Rhesus', 'Jumlah']
         )
@@ -224,7 +226,6 @@ st.subheader("🏥 Tabel & Grafik RS/Klinik Tujuan (Top 20)")
 if 'Droping RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     df_rs = df_filtered.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
     df_rs = df_rs.sort_values('Jumlah', ascending=False)
-
     col1, col2 = st.columns([1, 1.5])
     with col1:
         st.dataframe(df_rs.head(20), use_container_width=True, height=400)
