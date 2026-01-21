@@ -54,22 +54,18 @@ df = load_data()
 # =========================
 st.sidebar.header("🎛️ Filter Data")
 
-# Jenis Distribusi
 jenis_list = df['Jenis Permintaan'].dropna().unique().tolist()
 jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
 
-# Jenis Formulir
 form_list = df['Jenis Pengimputan'].dropna().unique().tolist()
 form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
-# RS/Klinik
 if 'Droping RS/Klinik Tujuan' in df.columns:
     rs_list = df['Droping RS/Klinik Tujuan'].dropna().unique().tolist()
     rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", rs_list, default=rs_list)
 else:
     rs_filter = []
 
-# Bulan
 bulan_list = df['Bulan'].dropna().unique().tolist()
 bulan_filter = st.sidebar.multiselect("Bulan:", bulan_list, default=bulan_list)
 
@@ -98,7 +94,7 @@ if 'Tanggal' in df.columns:
 # 🧾 HEADER
 # =========================
 st.title("💉 Dashboard Distribusi & Pelayanan Darah 2026")
-st.markdown("#### Analisis Real-time dari Google Sheets | Droping, Permintaan & Pemenuhan")
+st.markdown("#### Analisis Droping, Permintaan & Pemenuhan | Real-time dari Google Sheets")
 st.markdown("---")
 
 # =========================
@@ -116,9 +112,9 @@ st.download_button(
 )
 
 # =========================
-# 📈 TREND BULANAN
+# 📈 TREND BULANAN (TOTAL)
 # =========================
-st.subheader("📊 Trend Bulanan (SUM of Jumlah)")
+st.subheader("📊 Trend Bulanan (Total Jumlah)")
 if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     df_trend = df_filtered.groupby('Periode', as_index=False)['Jumlah'].sum().sort_values('Periode')
     chart_trend = (
@@ -132,6 +128,31 @@ if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
         .properties(width=950, height=350)
     )
     st.altair_chart(chart_trend, use_container_width=True)
+
+# =========================
+# 🏥 TREND MENURUT RS/KLINIK TUJUAN
+# =========================
+st.subheader("🏥 Trend Bulanan Menurut RS/Klinik Tujuan")
+if 'Periode' in df_filtered.columns and 'Droping RS/Klinik Tujuan' in df_filtered.columns:
+    df_trend_rs = (
+        df_filtered.groupby(['Periode', 'Droping RS/Klinik Tujuan'], as_index=False)['Jumlah'].sum()
+    )
+    # ambil hanya 10 RS teratas biar rapi
+    top_rs = df_trend_rs.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().nlargest(10).index
+    df_trend_rs = df_trend_rs[df_trend_rs['Droping RS/Klinik Tujuan'].isin(top_rs)]
+
+    chart_trend_rs = (
+        alt.Chart(df_trend_rs)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X('Periode:N', title='Bulan'),
+            y=alt.Y('Jumlah:Q', title='Jumlah'),
+            color=alt.Color('Droping RS/Klinik Tujuan:N', title='RS/Klinik'),
+            tooltip=['Periode', 'Droping RS/Klinik Tujuan', 'Jumlah']
+        )
+        .properties(width=950, height=400)
+    )
+    st.altair_chart(chart_trend_rs, use_container_width=True)
 
 # =========================
 # 🧪 DISTRIBUSI KOMPONEN
@@ -152,7 +173,7 @@ if 'Komponen' in df_filtered.columns:
     st.altair_chart(chart_komp, use_container_width=True)
 
 # =========================
-# ⚗️ RHESUS NEGATIF vs POSITIF
+# ⚗️ RHESUS POSITIF/NEGATIF
 # =========================
 st.subheader("🩸 Negatif dan Positif per Golongan Darah")
 if 'Rhesus' in df_filtered.columns and 'Golongan Darah' in df_filtered.columns:
@@ -171,9 +192,9 @@ if 'Rhesus' in df_filtered.columns and 'Golongan Darah' in df_filtered.columns:
     st.altair_chart(chart_rh, use_container_width=True)
 
 # =========================
-# 🏥 RS/KLINIK TUJUAN
+# 🏥 DISTRIBUSI RS/KLINIK TUJUAN (TABEL + BAR)
 # =========================
-st.subheader("🏥 Distribusi Berdasarkan RS/Klinik Tujuan")
+st.subheader("🏥 Distribusi Berdasarkan RS/Klinik Tujuan (Total Jumlah)")
 if 'Droping RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     df_rs = df_filtered.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
     df_rs = df_rs.sort_values('Jumlah', ascending=False)
