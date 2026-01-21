@@ -18,7 +18,6 @@ st.markdown("""
             color: #fafafa !important;
         }
         h1,h2,h3,h4 {color:#58a6ff;}
-        .stDataFrame {border-radius: 10px;}
         .sidebar-title {
             font-size: 18px;
             font-weight: 700;
@@ -37,8 +36,8 @@ def load_data():
     df = pd.read_csv(url)
     df = df.iloc[:, :10]
     df.columns = [c.strip() for c in df.columns]
-    if 'Tanggal' in df.columns:
-        df['Tanggal'] = pd.to_datetime(df['Tanggal'], errors='coerce')
+    if 'Tanggal Droping' in df.columns:
+        df['Tanggal Droping'] = pd.to_datetime(df['Tanggal Droping'], errors='coerce')
     if 'Bulan' in df.columns and 'Tahun' in df.columns:
         df['Periode'] = df['Bulan'].astype(str) + " " + df['Tahun'].astype(str)
     return df
@@ -58,19 +57,18 @@ jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=j
 form_list = df['Jenis Pengimputan'].dropna().unique().tolist()
 form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
-# RS/Klinik Tujuan (UTAMA)
-if 'Droping RS/Klinik Tujuan' in df.columns:
-    rs_list = sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist())
-    select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik Tujuan", value=True)
-    if select_all:
-        rs_filter = rs_list
-    else:
-        rs_filter = st.sidebar.multiselect("Pilih RS/Klinik Tujuan:", rs_list, default=[])
+# =========================
+# 🏥 FILTER RS/KLINIK TUJUAN (UTAMA)
+# =========================
+rs_list = sorted(df['RS/Klinik Tujuan'].dropna().unique().tolist())
+select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik Tujuan", value=True)
+if select_all:
+    rs_filter = rs_list
 else:
-    rs_filter = []
+    rs_filter = st.sidebar.multiselect("Pilih RS/Klinik Tujuan:", rs_list, default=[])
 
 # =========================
-# 🧭 FILTER MENURUT BULAN
+# 🗓️ FILTER MENURUT BULAN
 # =========================
 st.sidebar.markdown("---")
 st.sidebar.markdown('<p class="sidebar-title">🗓️ Filter Menurut Bulan</p>', unsafe_allow_html=True)
@@ -79,42 +77,35 @@ bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
 bulan_filter = st.sidebar.multiselect("Pilih Bulan:", bulan_list, default=bulan_list)
 
 # =========================
-# 🏥 FILTER MENURUT RS/KLINIK TUJUAN (langsung dari kolom D)
+# 🏥 FILTER TAMBAHAN MENURUT RS/KLINIK TUJUAN
 # =========================
 st.sidebar.markdown("---")
 st.sidebar.markdown('<p class="sidebar-title">🏥 Filter Menurut RS/Klinik Tujuan</p>', unsafe_allow_html=True)
 
-# 🔥 Ambil langsung dari kolom D (Droping RS/Klinik Tujuan)
-if 'Droping RS/Klinik Tujuan' in df.columns:
-    rs_filter_extra = st.sidebar.multiselect(
-        "Pilih RS/Klinik (Tambahan):",
-        options=sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist()),
-        default=[]
-    )
-else:
-    rs_filter_extra = []
+rs_filter_extra = st.sidebar.multiselect(
+    "Pilih RS/Klinik (Tambahan):",
+    options=rs_list,
+    default=[]
+)
 
 # =========================
 # 🧩 LOGIKA FILTER
 # =========================
-df_filtered = df[
-    (df['Jenis Permintaan'].isin(jenis_filter)) &
-    (df['Jenis Pengimputan'].isin(form_filter))
-]
+df_filtered = df.copy()
+df_filtered = df_filtered[df_filtered['Jenis Permintaan'].isin(jenis_filter)]
+df_filtered = df_filtered[df_filtered['Jenis Pengimputan'].isin(form_filter)]
 
-# Gabungkan kedua filter RS (utama + tambahan)
-if rs_filter or rs_filter_extra:
-    combined_rs = list(set(rs_filter + rs_filter_extra))
-    df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(combined_rs)]
+# Gabungkan dua filter RS
+combined_rs = list(set(rs_filter + rs_filter_extra))
+df_filtered = df_filtered[df_filtered['RS/Klinik Tujuan'].isin(combined_rs)]
 
-if bulan_filter:
-    df_filtered = df_filtered[df_filtered['Bulan'].isin(bulan_filter)]
+df_filtered = df_filtered[df_filtered['Bulan'].isin(bulan_filter)]
 
 # =========================
 # 🕒 INFO DATA TERAKHIR
 # =========================
-if 'Tanggal' in df.columns:
-    last_date = df['Tanggal'].max()
+if 'Tanggal Droping' in df.columns:
+    last_date = df['Tanggal Droping'].max()
     if pd.notnull(last_date):
         st.markdown(f"### 🕒 Data terakhir diinput: **{last_date.strftime('%d %B %Y')}**")
 
@@ -157,28 +148,27 @@ if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     st.altair_chart(chart_trend, use_container_width=True)
 
 # =========================
-# 🏥 TREND MENURUT RS/KLINIK TUJUAN
+# 🏥 DISTRIBUSI RS/KLINIK TUJUAN
 # =========================
-st.subheader("🏥 Trend Bulanan Menurut RS/Klinik Tujuan")
-if 'Periode' in df_filtered.columns and 'Droping RS/Klinik Tujuan' in df_filtered.columns:
-    df_trend_rs = (
-        df_filtered.groupby(['Periode', 'Droping RS/Klinik Tujuan'], as_index=False)['Jumlah'].sum()
-    )
-    top_rs = df_trend_rs.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().nlargest(10).index
-    df_trend_rs = df_trend_rs[df_trend_rs['Droping RS/Klinik Tujuan'].isin(top_rs)]
+st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan")
+df_rs = df_filtered.groupby('RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
+df_rs = df_rs.sort_values('Jumlah', ascending=False)
 
-    chart_trend_rs = (
-        alt.Chart(df_trend_rs)
-        .mark_line(point=True)
+col1, col2 = st.columns([1, 1.5])
+with col1:
+    st.dataframe(df_rs.head(20), use_container_width=True, height=400)
+with col2:
+    chart_rs = (
+        alt.Chart(df_rs.head(20))
+        .mark_bar(color="#0096FF")
         .encode(
-            x=alt.X('Periode:N', title='Bulan'),
-            y=alt.Y('Jumlah:Q', title='Jumlah'),
-            color=alt.Color('Droping RS/Klinik Tujuan:N', title='RS/Klinik'),
-            tooltip=['Periode', 'Droping RS/Klinik Tujuan', 'Jumlah']
+            x=alt.X('Jumlah:Q', title='Total Jumlah'),
+            y=alt.Y('RS/Klinik Tujuan:N', sort='-x', title='RS/Klinik Tujuan'),
+            tooltip=['RS/Klinik Tujuan', 'Jumlah']
         )
-        .properties(width=950, height=400)
+        .properties(width=800, height=400)
     )
-    st.altair_chart(chart_trend_rs, use_container_width=True)
+    st.altair_chart(chart_rs, use_container_width=True)
 
 # =========================
 # 🧾 FOOTER
