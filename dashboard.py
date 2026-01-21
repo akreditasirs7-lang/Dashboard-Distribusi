@@ -7,7 +7,7 @@ import math
 # =========================
 # ⚙️ KONFIGURASI DASAR
 # =========================
-st.set_page_config(page_title="Dashboard Perbandingan Permintaan vs Pemenuhan 2025–2026", layout="wide", page_icon="💉")
+st.set_page_config(page_title="Dashboard Mirror Permintaan vs Pemenuhan 2025–2026", layout="wide", page_icon="💉")
 
 # =========================
 # 🎨 PILIHAN TEMA
@@ -113,112 +113,88 @@ df_filtered = df[
 # =========================
 # 🧾 HEADER
 # =========================
-st.title("💉 Dashboard Perbandingan Jenis Permintaan vs Pemenuhan (2025–2026)")
-st.markdown("#### 📊 Tampilan Kiri-Kanan untuk Analisis yang Lebih Jelas")
+st.title("💉 Dashboard Mirror Chart – Permintaan vs Pemenuhan (2025–2026)")
+st.markdown("#### 📊 Perbandingan Kiri–Kanan dalam Satu Chart untuk Analisis yang Lebih Akurat")
 st.markdown("---")
 
 # =========================
-# 📊 FUNGSI CHART
+# 📊 FUNGSI CHART MIRROR
 # =========================
-def chart_bar(df, title, color):
-    base = (
-        alt.Chart(df)
-        .mark_bar(color=color)
+def mirror_chart(df, kategori, title, warna_kiri, warna_kanan):
+    df_pivot = (
+        df.groupby(["Jenis Pengimputan", kategori])["Jumlah"]
+        .sum()
+        .unstack(fill_value=0)
+        .T
+        .reset_index()
+        .rename(columns={"index": kategori})
+    )
+    if "Permintaan" not in df_pivot.columns or "Pemenuhan" not in df_pivot.columns:
+        return None
+
+    df_pivot["Permintaan"] = -df_pivot["Permintaan"]  # nilai kiri negatif
+    df_melt = df_pivot.melt(id_vars=[kategori], var_name="Jenis", value_name="Jumlah")
+
+    chart = (
+        alt.Chart(df_melt)
+        .mark_bar()
         .encode(
-            x=alt.X("Kategori:N", sort='-y', title="Kategori"),
-            y=alt.Y("Jumlah:Q", title="Total Jumlah"),
-            tooltip=["Kategori", "Jumlah"]
+            x=alt.X("Jumlah:Q", title="Jumlah (Kiri=Permintaan, Kanan=Pemenuhan)"),
+            y=alt.Y(f"{kategori}:N", sort='-x', title=kategori),
+            color=alt.Color(
+                "Jenis:N",
+                scale=alt.Scale(domain=["Permintaan", "Pemenuhan"], range=[warna_kiri, warna_kanan]),
+            ),
+            tooltip=[kategori, "Jenis", "Jumlah"]
         )
-        .properties(width=430, height=350, title=title)
+        .properties(width=950, height=500, title=title)
     )
-    text = (
-        alt.Chart(df)
-        .mark_text(align="center", baseline="bottom", dy=-8, color="#111", fontWeight="bold")
-        .encode(x="Kategori:N", y="Jumlah:Q", text="Jumlah:Q")
+
+    # Tambah garis tengah nol
+    rule = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="white", strokeDash=[4, 4])
+    return chart + rule
+
+# =========================
+# 📈 CHART: PER KOMPONEN
+# =========================
+if "Komponen" in df_filtered.columns:
+    st.subheader("🧪 Mirror Chart: Permintaan vs Pemenuhan per Komponen")
+    chart_komponen = mirror_chart(
+        df_filtered, "Komponen",
+        "🧪 Perbandingan Komponen (Mirror Chart)",
+        theme["permintaan_color"], theme["pemenuhan_color"]
     )
-    return base + text
+    if chart_komponen:
+        st.altair_chart(chart_komponen, use_container_width=True)
 
 # =========================
-# 📈 TREND PERBANDINGAN (SIDE BY SIDE)
+# 🩸 CHART: PER GOLONGAN DARAH
 # =========================
-st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan (Side-by-Side)")
-
-col1, col2 = st.columns(2)
-
-for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
-    with col:
-        df_trend = (
-            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-            .groupby(["Tahun", "Bulan"], as_index=False)["Jumlah"]
-            .sum()
-            .sort_values(["Tahun", "Bulan"])
-        )
-        if not df_trend.empty:
-            chart = (
-                alt.Chart(df_trend)
-                .mark_line(point=True, color=warna)
-                .encode(
-                    x="Bulan:N",
-                    y="Jumlah:Q",
-                    color="Tahun:N",
-                    tooltip=["Tahun", "Bulan", "Jumlah"],
-                )
-                .properties(title=f"📊 Trend Bulanan {jenis}")
-            )
-            st.altair_chart(chart, use_container_width=True)
+if "Golongan Darah" in df_filtered.columns:
+    st.subheader("🩸 Mirror Chart: Permintaan vs Pemenuhan per Golongan Darah")
+    chart_goldar = mirror_chart(
+        df_filtered, "Golongan Darah",
+        "🩸 Perbandingan Golongan Darah (Mirror Chart)",
+        theme["permintaan_color"], theme["pemenuhan_color"]
+    )
+    if chart_goldar:
+        st.altair_chart(chart_goldar, use_container_width=True)
 
 # =========================
-# 🧪 KOMONEN SIDE BY SIDE
+# 🏥 CHART: PER RS/KLINIK TUJUAN
 # =========================
-st.subheader("🧪 Perbandingan Komponen (Kiri-Kanan)")
-col1, col2 = st.columns(2)
-
-for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
-    with col:
-        df_komp = (
-            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-            .groupby("Komponen", as_index=False)["Jumlah"]
-            .sum()
-            .rename(columns={"Komponen": "Kategori"})
-        )
-        if not df_komp.empty:
-            st.altair_chart(chart_bar(df_komp, f"{jenis} per Komponen", warna), use_container_width=True)
-
-# =========================
-# 🩸 GOLONGAN DARAH SIDE BY SIDE
-# =========================
-st.subheader("🩸 Perbandingan Golongan Darah (Kiri-Kanan)")
-col1, col2 = st.columns(2)
-
-for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
-    with col:
-        df_goldar = (
-            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-            .groupby("Golongan Darah", as_index=False)["Jumlah"]
-            .sum()
-            .rename(columns={"Golongan Darah": "Kategori"})
-        )
-        if not df_goldar.empty:
-            st.altair_chart(chart_bar(df_goldar, f"{jenis} per Golongan Darah", warna), use_container_width=True)
-
-# =========================
-# 🏥 RS/KLINIK TUJUAN SIDE BY SIDE
-# =========================
-st.subheader("🏥 Distribusi per RS/Klinik Tujuan (Kiri-Kanan)")
-col1, col2 = st.columns(2)
-
-for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
-    with col:
-        df_rs = (
-            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-            .groupby("RS/Klinik Tujuan", as_index=False)["Jumlah"]
-            .sum()
-            .rename(columns={"RS/Klinik Tujuan": "Kategori"})
-            .sort_values("Jumlah", ascending=False)
-            .head(10)
-        )
-        if not df_rs.empty:
-            st.altair_chart(chart_bar(df_rs, f"{jenis} per RS/Klinik Tujuan (Top 10)", warna), use_container_width=True)
+if "RS/Klinik Tujuan" in df_filtered.columns:
+    st.subheader("🏥 Mirror Chart: Permintaan vs Pemenuhan per RS/Klinik Tujuan (Top 15)")
+    df_filtered_top = df_filtered[df_filtered["RS/Klinik Tujuan"].isin(
+        df_filtered["RS/Klinik Tujuan"].value_counts().head(15).index
+    )]
+    chart_rs = mirror_chart(
+        df_filtered_top, "RS/Klinik Tujuan",
+        "🏥 Perbandingan RS/Klinik Tujuan (Mirror Chart)",
+        theme["permintaan_color"], theme["pemenuhan_color"]
+    )
+    if chart_rs:
+        st.altair_chart(chart_rs, use_container_width=True)
 
 # =========================
 # 📥 DOWNLOAD DATA
@@ -231,7 +207,7 @@ with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
 st.download_button(
     label="⬇️ Download Data (Excel)",
     data=output.getvalue(),
-    file_name="data_side_by_side_2025_2026.xlsx",
+    file_name="data_mirror_chart_2025_2026.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
@@ -265,4 +241,4 @@ else:
     st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
 
 st.markdown("---")
-st.caption("📊 Dashboard Side-by-Side 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
+st.caption("📊 Dashboard Mirror Chart 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
