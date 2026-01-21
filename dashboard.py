@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from io import StringIO
+import math
 
 # =========================
 # 🎨 KONFIGURASI HALAMAN
@@ -18,10 +19,14 @@ st.markdown("""
             color: #fafafa !important;
         }
         h1,h2,h3,h4 {color:#58a6ff;}
+        .stDataFrame {border-radius: 10px;}
         .sidebar-title {
             font-size: 18px;
             font-weight: 700;
             color: #9CDCFE;
+        }
+        table {
+            color: white !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -34,7 +39,7 @@ url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMat
 @st.cache_data(ttl=30)
 def load_data():
     df = pd.read_csv(url)
-    df = df.iloc[:, :10]
+    df = df.iloc[:, :10]  # ambil kolom A-J
     df.columns = [c.strip() for c in df.columns]
     if 'Tanggal Droping' in df.columns:
         df['Tanggal Droping'] = pd.to_datetime(df['Tanggal Droping'], errors='coerce')
@@ -49,17 +54,13 @@ df = load_data()
 # =========================
 st.sidebar.markdown('<p class="sidebar-title">🎛️ Filter Data</p>', unsafe_allow_html=True)
 
-# Jenis Distribusi
 jenis_list = df['Jenis Permintaan'].dropna().unique().tolist()
 jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
 
-# Jenis Formulir
 form_list = df['Jenis Pengimputan'].dropna().unique().tolist()
 form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
-# =========================
-# 🏥 FILTER RS/KLINIK TUJUAN (UTAMA)
-# =========================
+# Filter RS
 rs_list = sorted(df['RS/Klinik Tujuan'].dropna().unique().tolist())
 select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik Tujuan", value=True)
 if select_all:
@@ -67,38 +68,19 @@ if select_all:
 else:
     rs_filter = st.sidebar.multiselect("Pilih RS/Klinik Tujuan:", rs_list, default=[])
 
-# =========================
-# 🗓️ FILTER MENURUT BULAN
-# =========================
+# Filter Bulan
 st.sidebar.markdown("---")
 st.sidebar.markdown('<p class="sidebar-title">🗓️ Filter Menurut Bulan</p>', unsafe_allow_html=True)
-
 bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
 bulan_filter = st.sidebar.multiselect("Pilih Bulan:", bulan_list, default=bulan_list)
 
 # =========================
-# 🏥 FILTER TAMBAHAN MENURUT RS/KLINIK TUJUAN
-# =========================
-st.sidebar.markdown("---")
-st.sidebar.markdown('<p class="sidebar-title">🏥 Filter Menurut RS/Klinik Tujuan</p>', unsafe_allow_html=True)
-
-rs_filter_extra = st.sidebar.multiselect(
-    "Pilih RS/Klinik (Tambahan):",
-    options=rs_list,
-    default=[]
-)
-
-# =========================
-# 🧩 LOGIKA FILTER
+# 🧩 FILTER LOGIKA
 # =========================
 df_filtered = df.copy()
 df_filtered = df_filtered[df_filtered['Jenis Permintaan'].isin(jenis_filter)]
 df_filtered = df_filtered[df_filtered['Jenis Pengimputan'].isin(form_filter)]
-
-# Gabungkan dua filter RS
-combined_rs = list(set(rs_filter + rs_filter_extra))
-df_filtered = df_filtered[df_filtered['RS/Klinik Tujuan'].isin(combined_rs)]
-
+df_filtered = df_filtered[df_filtered['RS/Klinik Tujuan'].isin(rs_filter)]
 df_filtered = df_filtered[df_filtered['Bulan'].isin(bulan_filter)]
 
 # =========================
@@ -117,7 +99,7 @@ st.markdown("#### Analisis Droping, Permintaan & Pemenuhan | Real-time dari Goog
 st.markdown("---")
 
 # =========================
-# 📥 DOWNLOAD DATA
+# 📦 DOWNLOAD DATA
 # =========================
 st.subheader("📦 Download Data Terfilter")
 csv_buffer = StringIO()
@@ -130,45 +112,42 @@ st.download_button(
 )
 
 # =========================
-# 📈 TREND BULANAN (TOTAL)
+# 📈 TREND BULANAN
 # =========================
 st.subheader("📊 Trend Bulanan (Total Jumlah)")
 if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     df_trend = df_filtered.groupby('Periode', as_index=False)['Jumlah'].sum().sort_values('Periode')
-    chart_trend = (
-        alt.Chart(df_trend)
-        .mark_line(point=True, color='#00c4ff')
-        .encode(
-            x=alt.X('Periode:N', title='Periode (Bulan)'),
-            y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-            tooltip=['Periode', 'Jumlah']
+    if len(df_trend) > 0:
+        chart_trend = (
+            alt.Chart(df_trend)
+            .mark_line(point=True, color='#00c4ff')
+            .encode(
+                x=alt.X('Periode:N', title='Periode (Bulan)'),
+                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
+                tooltip=['Periode', 'Jumlah']
+            )
+            .properties(width=950, height=350)
         )
-        .properties(width=950, height=350)
-    )
-    st.altair_chart(chart_trend, use_container_width=True)
+        st.altair_chart(chart_trend, use_container_width=True)
+    else:
+        st.warning("Tidak ada data untuk ditampilkan.")
 
 # =========================
-# 🏥 DISTRIBUSI RS/KLINIK TUJUAN
+# 📋 DATA INPUT TERBARU (10 baris dengan pagination)
 # =========================
-st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan")
-df_rs = df_filtered.groupby('RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
-df_rs = df_rs.sort_values('Jumlah', ascending=False)
+st.subheader("📋 Data Input Terbaru (10 Baris per Halaman)")
+page_size = 10
+total_rows = len(df_filtered)
+total_pages = math.ceil(total_rows / page_size)
 
-col1, col2 = st.columns([1, 1.5])
-with col1:
-    st.dataframe(df_rs.head(20), use_container_width=True, height=400)
-with col2:
-    chart_rs = (
-        alt.Chart(df_rs.head(20))
-        .mark_bar(color="#0096FF")
-        .encode(
-            x=alt.X('Jumlah:Q', title='Total Jumlah'),
-            y=alt.Y('RS/Klinik Tujuan:N', sort='-x', title='RS/Klinik Tujuan'),
-            tooltip=['RS/Klinik Tujuan', 'Jumlah']
-        )
-        .properties(width=800, height=400)
-    )
-    st.altair_chart(chart_rs, use_container_width=True)
+if total_rows > 0:
+    page_number = st.number_input("Halaman:", min_value=1, max_value=total_pages, value=1, step=1)
+    start_idx = (page_number - 1) * page_size
+    end_idx = start_idx + page_size
+    st.dataframe(df_filtered.iloc[start_idx:end_idx], use_container_width=True)
+    st.caption(f"Menampilkan {start_idx+1}-{min(end_idx, total_rows)} dari {total_rows} baris.")
+else:
+    st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
 
 # =========================
 # 🧾 FOOTER
