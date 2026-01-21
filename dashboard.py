@@ -3,9 +3,6 @@ import pandas as pd
 import altair as alt
 from io import BytesIO
 import math
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import cm
 
 # =========================
 # ⚙️ KONFIGURASI DASAR
@@ -117,107 +114,111 @@ df_filtered = df[
 # 🧾 HEADER
 # =========================
 st.title("💉 Dashboard Perbandingan Jenis Permintaan vs Pemenuhan (2025–2026)")
-st.markdown("#### Analisis Real-time dari Google Sheets")
+st.markdown("#### 📊 Tampilan Kiri-Kanan untuk Analisis yang Lebih Jelas")
 st.markdown("---")
 
 # =========================
-# 📊 GRAFIK PERBANDINGAN PERMINTAAN vs PEMENUHAN
+# 📊 FUNGSI CHART
 # =========================
-st.subheader("📈 Perbandingan Jenis Permintaan vs Pemenuhan per Tahun")
-
-if "Jenis Pengimputan" in df_filtered.columns and "Jumlah" in df_filtered.columns:
-    df_compare = (
-        df_filtered.groupby(["Tahun", "Jenis Pengimputan"])["Jumlah"]
-        .sum()
-        .reset_index()
-    )
-
-    chart_compare = (
-        alt.Chart(df_compare)
-        .mark_bar()
+def chart_bar(df, title, color):
+    base = (
+        alt.Chart(df)
+        .mark_bar(color=color)
         .encode(
-            x=alt.X("Tahun:N", title="Tahun"),
+            x=alt.X("Kategori:N", sort='-y', title="Kategori"),
             y=alt.Y("Jumlah:Q", title="Total Jumlah"),
-            color=alt.Color("Jenis Pengimputan:N",
-                            scale=alt.Scale(
-                                domain=["Permintaan", "Pemenuhan"],
-                                range=[theme['permintaan_color'], theme['pemenuhan_color']]
-                            )),
-            tooltip=["Tahun", "Jenis Pengimputan", "Jumlah"]
+            tooltip=["Kategori", "Jumlah"]
         )
-        .properties(width=950, height=400, title="📊 Total Permintaan vs Pemenuhan per Tahun")
+        .properties(width=430, height=350, title=title)
     )
-    st.altair_chart(chart_compare, use_container_width=True)
+    text = (
+        alt.Chart(df)
+        .mark_text(align="center", baseline="bottom", dy=-8, color="#111", fontWeight="bold")
+        .encode(x="Kategori:N", y="Jumlah:Q", text="Jumlah:Q")
+    )
+    return base + text
 
 # =========================
-# 📈 TREND PERBANDINGAN
+# 📈 TREND PERBANDINGAN (SIDE BY SIDE)
 # =========================
-if "Jumlah" in df_filtered.columns and "Bulan" in df_filtered.columns:
-    df_trend = (
-        df_filtered.groupby(["Tahun", "Bulan", "Jenis Pengimputan"], as_index=False)["Jumlah"]
-        .sum()
-        .sort_values(["Tahun", "Bulan"])
-    )
+st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan (Side-by-Side)")
 
-    chart_trend = (
-        alt.Chart(df_trend)
-        .mark_line(point=True)
-        .encode(
-            x="Bulan:N",
-            y="Jumlah:Q",
-            color="Jenis Pengimputan:N",
-            strokeDash="Tahun:N",
-            tooltip=["Tahun", "Bulan", "Jenis Pengimputan", "Jumlah"],
-        )
-        .properties(width=950, height=400, title="📈 Trend Bulanan Permintaan vs Pemenuhan (2025–2026)")
-    )
-    st.altair_chart(chart_trend, use_container_width=True)
+col1, col2 = st.columns(2)
 
-# =========================
-# 🧪 PERBANDINGAN MENURUT KOMPONEN
-# =========================
-if "Komponen" in df_filtered.columns:
-    df_komp = (
-        df_filtered.groupby(["Tahun", "Jenis Pengimputan", "Komponen"])["Jumlah"]
-        .sum()
-        .reset_index()
-    )
-    chart_komp = (
-        alt.Chart(df_komp)
-        .mark_bar()
-        .encode(
-            x="Komponen:N",
-            y="Jumlah:Q",
-            color="Jenis Pengimputan:N",
-            column="Tahun:N",
-            tooltip=["Tahun", "Komponen", "Jenis Pengimputan", "Jumlah"]
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_trend = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby(["Tahun", "Bulan"], as_index=False)["Jumlah"]
+            .sum()
+            .sort_values(["Tahun", "Bulan"])
         )
-        .properties(title="🧪 Distribusi Komponen Berdasarkan Jenis Permintaan vs Pemenuhan")
-    )
-    st.altair_chart(chart_komp, use_container_width=True)
+        if not df_trend.empty:
+            chart = (
+                alt.Chart(df_trend)
+                .mark_line(point=True, color=warna)
+                .encode(
+                    x="Bulan:N",
+                    y="Jumlah:Q",
+                    color="Tahun:N",
+                    tooltip=["Tahun", "Bulan", "Jumlah"],
+                )
+                .properties(title=f"📊 Trend Bulanan {jenis}")
+            )
+            st.altair_chart(chart, use_container_width=True)
 
 # =========================
-# 🩸 PERBANDINGAN MENURUT GOLONGAN DARAH
+# 🧪 KOMONEN SIDE BY SIDE
 # =========================
-if "Golongan Darah" in df_filtered.columns:
-    df_goldar = (
-        df_filtered.groupby(["Tahun", "Jenis Pengimputan", "Golongan Darah"])["Jumlah"]
-        .sum()
-        .reset_index()
-    )
-    chart_goldar = (
-        alt.Chart(df_goldar)
-        .mark_bar()
-        .encode(
-            x="Golongan Darah:N",
-            y="Jumlah:Q",
-            color="Jenis Pengimputan:N",
-            column="Tahun:N",
-            tooltip=["Tahun", "Golongan Darah", "Jenis Pengimputan", "Jumlah"]
+st.subheader("🧪 Perbandingan Komponen (Kiri-Kanan)")
+col1, col2 = st.columns(2)
+
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_komp = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby("Komponen", as_index=False)["Jumlah"]
+            .sum()
+            .rename(columns={"Komponen": "Kategori"})
         )
-        .properties(title="🩸 Perbandingan Golongan Darah (Permintaan vs Pemenuhan)")
-    )
-    st.altair_chart(chart_goldar, use_container_width=True)
+        if not df_komp.empty:
+            st.altair_chart(chart_bar(df_komp, f"{jenis} per Komponen", warna), use_container_width=True)
+
+# =========================
+# 🩸 GOLONGAN DARAH SIDE BY SIDE
+# =========================
+st.subheader("🩸 Perbandingan Golongan Darah (Kiri-Kanan)")
+col1, col2 = st.columns(2)
+
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_goldar = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby("Golongan Darah", as_index=False)["Jumlah"]
+            .sum()
+            .rename(columns={"Golongan Darah": "Kategori"})
+        )
+        if not df_goldar.empty:
+            st.altair_chart(chart_bar(df_goldar, f"{jenis} per Golongan Darah", warna), use_container_width=True)
+
+# =========================
+# 🏥 RS/KLINIK TUJUAN SIDE BY SIDE
+# =========================
+st.subheader("🏥 Distribusi per RS/Klinik Tujuan (Kiri-Kanan)")
+col1, col2 = st.columns(2)
+
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_rs = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby("RS/Klinik Tujuan", as_index=False)["Jumlah"]
+            .sum()
+            .rename(columns={"RS/Klinik Tujuan": "Kategori"})
+            .sort_values("Jumlah", ascending=False)
+            .head(10)
+        )
+        if not df_rs.empty:
+            st.altair_chart(chart_bar(df_rs, f"{jenis} per RS/Klinik Tujuan (Top 10)", warna), use_container_width=True)
 
 # =========================
 # 📥 DOWNLOAD DATA
@@ -230,17 +231,18 @@ with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
 st.download_button(
     label="⬇️ Download Data (Excel)",
     data=output.getvalue(),
-    file_name="data_permintaan_pemenuhan_2025_2026.xlsx",
+    file_name="data_side_by_side_2025_2026.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
 # =========================
-# 📋 DATA TABLE
+# 📋 TABEL DATA
 # =========================
 st.subheader("📋 Data Input (10 Baris per Halaman)")
 page_size = 10
 total_rows = len(df_filtered)
 total_pages = math.ceil(total_rows / page_size)
+
 if "page_number" not in st.session_state:
     st.session_state.page_number = 1
 
@@ -263,4 +265,4 @@ else:
     st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
 
 st.markdown("---")
-st.caption("📊 Dashboard Perbandingan Permintaan vs Pemenuhan 2025–2026 | 🎨 Multi-Tema | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
+st.caption("📊 Dashboard Side-by-Side 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
