@@ -130,8 +130,37 @@ st.markdown('</div>', unsafe_allow_html=True)
 # =========================
 if show_graphs:
     def chart_with_label(data, x, y, title, color):
-        chart = (
-            alt.Chart(data)
+    base = (
+        alt.Chart(data)
+        .mark_bar(color=color)
+        .encode(
+            x=alt.X(f"{x}:N", sort='-y', title=x),
+            y=alt.Y(f"{y}:Q", title="Total Jumlah"),
+            tooltip=[x, y],
+        )
+        .properties(width=950, height=400, title=title)
+    )
+
+    # Tambahkan label di atas batang
+    text = (
+        alt.Chart(data)
+        .mark_text(
+            align="center",
+            baseline="bottom",
+            dy=-8,            # jarak dari batang
+            color="white",    # warna label
+            fontSize=14,      # ukuran teks
+            fontWeight="bold" # tebal biar jelas
+        )
+        .encode(
+            x=alt.X(f"{x}:N", sort='-y'),
+            y=alt.Y(f"{y}:Q"),
+            text=alt.Text(f"{y}:Q")
+        )
+    )
+
+    return base + text
+
             .mark_bar(color=color)
             .encode(
                 x=alt.X(f"{x}:N", sort='-y', title=x),
@@ -243,3 +272,4 @@ else:
 
 st.markdown("---")
 st.caption("📡 Auto-refresh setiap 30 detik | Dark Mode Profesional | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
+
