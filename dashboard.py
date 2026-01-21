@@ -126,10 +126,9 @@ show_graphs = st.toggle("🧭 Tampilkan Semua Grafik", value=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# 📊 GRAFIK-GRAFIK
+# 📊 CHART FUNCTION (DENGAN LABEL ANGKA)
 # =========================
-if show_graphs:
-    def chart_with_label(data, x, y, title, color):
+def chart_with_label(data, x, y, title, color):
     base = (
         alt.Chart(data)
         .mark_bar(color=color)
@@ -141,16 +140,16 @@ if show_graphs:
         .properties(width=950, height=400, title=title)
     )
 
-    # Tambahkan label di atas batang
+    # Label angka di atas batang
     text = (
         alt.Chart(data)
         .mark_text(
             align="center",
             baseline="bottom",
-            dy=-8,            # jarak dari batang
-            color="white",    # warna label
-            fontSize=14,      # ukuran teks
-            fontWeight="bold" # tebal biar jelas
+            dy=-8,
+            color="white",
+            fontSize=13,
+            fontWeight="bold"
         )
         .encode(
             x=alt.X(f"{x}:N", sort='-y'),
@@ -161,50 +160,35 @@ if show_graphs:
 
     return base + text
 
-            .mark_bar(color=color)
-            .encode(
-                x=alt.X(f"{x}:N", sort='-y', title=x),
-                y=alt.Y(f"{y}:Q", title="Total Jumlah"),
-                tooltip=[x, y],
-            )
-            .properties(width=950, height=400, title=title)
-        )
-        text = chart.mark_text(align="center", baseline="bottom", dy=-5, color="white").encode(
-            text=alt.Text(f"{y}:Q")
-        )
-        return chart + text
-
-    # Grafik utama
-    charts = []
-    if 'Periode' in df_filtered.columns:
+# =========================
+# 📊 GRAFIK-GRAFIK
+# =========================
+if show_graphs:
+    if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
         df_trend = df_filtered.groupby('Periode', as_index=False)['Jumlah'].sum().sort_values('Periode')
-        charts.append(("Trend Bulanan", chart_with_label(df_trend, 'Periode', 'Jumlah', "📊 Trend Bulanan", "#00c4ff")))
+        st.altair_chart(chart_with_label(df_trend, 'Periode', 'Jumlah', "📊 Trend Bulanan", "#00c4ff"))
 
     if 'RS/Klinik Tujuan' in df_filtered.columns:
         df_rs = df_filtered.groupby('RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
         df_rs = df_rs.sort_values('Jumlah', ascending=False)
-        charts.append(("RS/Klinik Tujuan", chart_with_label(df_rs, 'RS/Klinik Tujuan', 'Jumlah', "🏥 Distribusi RS/Klinik", "#33FF99")))
+        st.altair_chart(chart_with_label(df_rs, 'RS/Klinik Tujuan', 'Jumlah', "🏥 Distribusi Menurut RS/Klinik Tujuan", "#33FF99"))
 
     if 'Komponen' in df_filtered.columns:
         df_komp = df_filtered.groupby('Komponen')['Jumlah'].sum().reset_index()
-        charts.append(("Komponen", chart_with_label(df_komp, 'Komponen', 'Jumlah', "🧪 Distribusi Komponen", "#FF7F50")))
+        st.altair_chart(chart_with_label(df_komp, 'Komponen', 'Jumlah', "🧪 Distribusi Menurut Komponen", "#FF7F50"))
 
     if 'Golongan Darah' in df_filtered.columns:
         df_goldar = df_filtered.groupby('Golongan Darah')['Jumlah'].sum().reset_index()
-        charts.append(("Golongan Darah", chart_with_label(df_goldar, 'Golongan Darah', 'Jumlah', "🩸 Golongan Darah", "#4FC3F7")))
+        st.altair_chart(chart_with_label(df_goldar, 'Golongan Darah', 'Jumlah', "🩸 Distribusi Menurut Golongan Darah", "#4FC3F7"))
 
     if 'Rhesus' in df_filtered.columns:
         df_rhesus = df_filtered.groupby('Rhesus')['Jumlah'].sum().reset_index()
-        charts.append(("Rhesus", chart_with_label(df_rhesus, 'Rhesus', 'Jumlah', "🧬 Rhesus", "#FF6B6B")))
-
-    for title, chart in charts:
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart_with_label(df_rhesus, 'Rhesus', 'Jumlah', "🧬 Distribusi Rhesus (Positif vs Negatif)", "#FF6B6B"))
 
 # =========================
-# 📤 EXPORT SEMUA GRAFIK KE PDF
+# 📤 EXPORT PDF
 # =========================
 st.subheader("📤 Export Semua Grafik ke PDF")
-
 if st.button("📄 Buat Laporan PDF"):
     pdf_buffer = BytesIO()
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
@@ -240,7 +224,7 @@ if st.button("📄 Buat Laporan PDF"):
     )
 
 # =========================
-# 📋 DATA TABLE
+# 📋 TABEL DATA (PAGINATION)
 # =========================
 st.subheader("📋 Data Input Terbaru (10 Baris per Halaman)")
 page_size = 10
@@ -272,4 +256,3 @@ else:
 
 st.markdown("---")
 st.caption("📡 Auto-refresh setiap 30 detik | Dark Mode Profesional | Dibuat dengan ❤️ menggunakan Streamlit & Altair")
-
