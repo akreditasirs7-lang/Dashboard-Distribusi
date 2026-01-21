@@ -9,7 +9,7 @@ from io import StringIO
 st.set_page_config(page_title="Dashboard Distribusi Darah", layout="wide", page_icon="💉")
 
 # =========================
-# 🌙 DARK MODE STYLING ELEGAN
+# 🌙 DARK MODE STYLING
 # =========================
 st.markdown("""
     <style>
@@ -50,9 +50,9 @@ def load_data():
 df = load_data()
 
 # =========================
-# 🧠 FILTER BAR
+# 🧠 FILTER UTAMA
 # =========================
-st.sidebar.header("🎛️ Filter Data")
+st.sidebar.header("🎛️ Filter Data Umum")
 
 jenis_list = df['Jenis Permintaan'].dropna().unique().tolist()
 jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
@@ -70,6 +70,20 @@ bulan_list = df['Bulan'].dropna().unique().tolist()
 bulan_filter = st.sidebar.multiselect("Bulan:", bulan_list, default=bulan_list)
 
 # =========================
+# 🏥 FILTER KHUSUS “RUMAH SAKIT FOKUS”
+# =========================
+st.sidebar.markdown("---")
+st.sidebar.header("🏥 Filter Fokus Rumah Sakit / Klinik")
+if 'Droping RS/Klinik Tujuan' in df.columns:
+    rs_focus = st.sidebar.multiselect(
+        "Pilih RS/Klinik Fokus:",
+        options=sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist()),
+        default=[]
+    )
+else:
+    rs_focus = []
+
+# =========================
 # 🧩 FILTER DATA
 # =========================
 df_filtered = df[
@@ -81,6 +95,8 @@ if rs_filter:
     df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(rs_filter)]
 if bulan_filter:
     df_filtered = df_filtered[df_filtered['Bulan'].isin(bulan_filter)]
+if rs_focus:
+    df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(rs_focus)]
 
 # =========================
 # 🕒 INFO DATA TERAKHIR
@@ -101,6 +117,7 @@ st.markdown("---")
 # 📥 TOMBOL DOWNLOAD CSV
 # =========================
 st.subheader("📦 Download Data Terfilter")
+from io import StringIO
 csv_buffer = StringIO()
 df_filtered.to_csv(csv_buffer, index=False)
 st.download_button(
@@ -112,7 +129,7 @@ st.download_button(
 )
 
 # =========================
-# 📈 TREND BULANAN (TOTAL)
+# 📈 TREND BULANAN TOTAL
 # =========================
 st.subheader("📊 Trend Bulanan (Total Jumlah)")
 if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
@@ -137,7 +154,6 @@ if 'Periode' in df_filtered.columns and 'Droping RS/Klinik Tujuan' in df_filtere
     df_trend_rs = (
         df_filtered.groupby(['Periode', 'Droping RS/Klinik Tujuan'], as_index=False)['Jumlah'].sum()
     )
-    # ambil hanya 10 RS teratas biar rapi
     top_rs = df_trend_rs.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().nlargest(10).index
     df_trend_rs = df_trend_rs[df_trend_rs['Droping RS/Klinik Tujuan'].isin(top_rs)]
 
@@ -173,6 +189,25 @@ if 'Komponen' in df_filtered.columns:
     st.altair_chart(chart_komp, use_container_width=True)
 
 # =========================
+# 🏥 DISTRIBUSI MENURUT RS/KLINIK TUJUAN
+# =========================
+st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan (Total Jumlah)")
+if 'Droping RS/Klinik Tujuan' in df_filtered.columns:
+    df_dist_rs = df_filtered.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
+    df_dist_rs = df_dist_rs.sort_values('Jumlah', ascending=False).head(15)
+    chart_dist_rs = (
+        alt.Chart(df_dist_rs)
+        .mark_bar(color="#33FF99")
+        .encode(
+            x=alt.X('Droping RS/Klinik Tujuan:N', sort='-y', title='RS/Klinik Tujuan'),
+            y=alt.Y('Jumlah:Q', title='Total Jumlah'),
+            tooltip=['Droping RS/Klinik Tujuan', 'Jumlah']
+        )
+        .properties(width=950, height=350)
+    )
+    st.altair_chart(chart_dist_rs, use_container_width=True)
+
+# =========================
 # ⚗️ RHESUS POSITIF/NEGATIF
 # =========================
 st.subheader("🩸 Negatif dan Positif per Golongan Darah")
@@ -192,9 +227,9 @@ if 'Rhesus' in df_filtered.columns and 'Golongan Darah' in df_filtered.columns:
     st.altair_chart(chart_rh, use_container_width=True)
 
 # =========================
-# 🏥 DISTRIBUSI RS/KLINIK TUJUAN (TABEL + BAR)
+# 📋 TABEL & GRAFIK RS/KLINIK
 # =========================
-st.subheader("🏥 Distribusi Berdasarkan RS/Klinik Tujuan (Total Jumlah)")
+st.subheader("🏥 Tabel & Grafik RS/Klinik Tujuan (Top 20)")
 if 'Droping RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     df_rs = df_filtered.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
     df_rs = df_rs.sort_values('Jumlah', ascending=False)
