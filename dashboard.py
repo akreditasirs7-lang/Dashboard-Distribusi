@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+from io import StringIO
 
 # =========================
 # 🎨 CONFIGURASI HALAMAN
@@ -86,7 +87,7 @@ if bulan_filter:
     df_filtered = df_filtered[df_filtered['Bulan'].isin(bulan_filter)]
 
 # =========================
-# 🕒 INFORMASI DATA
+# 🕒 INFO DATA TERAKHIR
 # =========================
 if 'Tanggal' in df.columns:
     last_date = df['Tanggal'].max()
@@ -94,21 +95,32 @@ if 'Tanggal' in df.columns:
         st.markdown(f"### 🕒 Data terakhir diinput: **{last_date.strftime('%d %B %Y')}**")
 
 # =========================
-# 🧾 JUDUL UTAMA
+# 🧾 HEADER
 # =========================
 st.title("💉 Dashboard Distribusi & Pelayanan Darah 2026")
-st.markdown("#### Analisis Data Droping, Permintaan, dan Pemenuhan secara Real-Time dari Google Sheets")
+st.markdown("#### Analisis Real-time dari Google Sheets | Droping, Permintaan & Pemenuhan")
 st.markdown("---")
 
 # =========================
-# 📈 TREND BULANAN (SUM OF JUMLAH)
+# 📥 TOMBOL DOWNLOAD CSV
+# =========================
+st.subheader("📦 Download Data Terfilter")
+csv_buffer = StringIO()
+df_filtered.to_csv(csv_buffer, index=False)
+st.download_button(
+    label="⬇️ Download Data (CSV)",
+    data=csv_buffer.getvalue(),
+    file_name="data_terfilter.csv",
+    mime="text/csv",
+    help="Unduh data yang sudah difilter ke file CSV"
+)
+
+# =========================
+# 📈 TREND BULANAN
 # =========================
 st.subheader("📊 Trend Bulanan (SUM of Jumlah)")
-if 'Bulan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
-    df_trend = (
-        df_filtered.groupby(['Periode'], as_index=False)['Jumlah'].sum()
-        .sort_values('Periode')
-    )
+if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
+    df_trend = df_filtered.groupby('Periode', as_index=False)['Jumlah'].sum().sort_values('Periode')
     chart_trend = (
         alt.Chart(df_trend)
         .mark_line(point=True, color='#00c4ff')
@@ -122,7 +134,7 @@ if 'Bulan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     st.altair_chart(chart_trend, use_container_width=True)
 
 # =========================
-# 🧪 DISTRIBUSI KOMPONEN (WB, TC, PRC, DLL)
+# 🧪 DISTRIBUSI KOMPONEN
 # =========================
 st.subheader("🧪 Distribusi Menurut Komponen")
 if 'Komponen' in df_filtered.columns:
@@ -140,7 +152,7 @@ if 'Komponen' in df_filtered.columns:
     st.altair_chart(chart_komp, use_container_width=True)
 
 # =========================
-# ⚗️ POSITIF vs NEGATIF
+# ⚗️ RHESUS NEGATIF vs POSITIF
 # =========================
 st.subheader("🩸 Negatif dan Positif per Golongan Darah")
 if 'Rhesus' in df_filtered.columns and 'Golongan Darah' in df_filtered.columns:
@@ -149,8 +161,8 @@ if 'Rhesus' in df_filtered.columns and 'Golongan Darah' in df_filtered.columns:
         alt.Chart(df_rh)
         .mark_bar()
         .encode(
-            x=alt.X('Golongan Darah:N'),
-            y=alt.Y('Jumlah:Q'),
+            x=alt.X('Golongan Darah:N', title='Golongan Darah'),
+            y=alt.Y('Jumlah:Q', title='Jumlah'),
             color=alt.Color('Rhesus:N', scale=alt.Scale(scheme='redblue')),
             tooltip=['Golongan Darah', 'Rhesus', 'Jumlah']
         )
@@ -159,10 +171,9 @@ if 'Rhesus' in df_filtered.columns and 'Golongan Darah' in df_filtered.columns:
     st.altair_chart(chart_rh, use_container_width=True)
 
 # =========================
-# 🏥 TABEL & GRAFIK RS/KLINIK TUJUAN
+# 🏥 RS/KLINIK TUJUAN
 # =========================
 st.subheader("🏥 Distribusi Berdasarkan RS/Klinik Tujuan")
-
 if 'Droping RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
     df_rs = df_filtered.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
     df_rs = df_rs.sort_values('Jumlah', ascending=False)
