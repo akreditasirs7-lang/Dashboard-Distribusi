@@ -58,7 +58,7 @@ jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=j
 form_list = df['Jenis Pengimputan'].dropna().unique().tolist()
 form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
-# RS/Klinik Tujuan (utama)
+# RS/Klinik Tujuan (UTAMA)
 if 'Droping RS/Klinik Tujuan' in df.columns:
     rs_list = sorted(df['Droping RS/Klinik Tujuan'].dropna().unique().tolist())
     select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik Tujuan", value=True)
@@ -70,7 +70,7 @@ else:
     rs_filter = []
 
 # =========================
-# 🧭 FILTER MENURUT BULAN (UBAH NAMA)
+# 🧭 FILTER MENURUT BULAN
 # =========================
 st.sidebar.markdown("---")
 st.sidebar.markdown('<p class="sidebar-title">🗓️ Filter Menurut Bulan</p>', unsafe_allow_html=True)
@@ -79,11 +79,12 @@ bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
 bulan_filter = st.sidebar.multiselect("Pilih Bulan:", bulan_list, default=bulan_list)
 
 # =========================
-# 🏥 FILTER TAMBAHAN MENURUT RS/KLINIK TUJUAN (BARU)
+# 🏥 FILTER MENURUT RS/KLINIK TUJUAN (langsung dari kolom D)
 # =========================
 st.sidebar.markdown("---")
 st.sidebar.markdown('<p class="sidebar-title">🏥 Filter Menurut RS/Klinik Tujuan</p>', unsafe_allow_html=True)
 
+# 🔥 Ambil langsung dari kolom D (Droping RS/Klinik Tujuan)
 if 'Droping RS/Klinik Tujuan' in df.columns:
     rs_filter_extra = st.sidebar.multiselect(
         "Pilih RS/Klinik (Tambahan):",
@@ -101,7 +102,7 @@ df_filtered = df[
     (df['Jenis Pengimputan'].isin(form_filter))
 ]
 
-# Gabungkan dua filter RS
+# Gabungkan kedua filter RS (utama + tambahan)
 if rs_filter or rs_filter_extra:
     combined_rs = list(set(rs_filter + rs_filter_extra))
     df_filtered = df_filtered[df_filtered['Droping RS/Klinik Tujuan'].isin(combined_rs)]
@@ -178,86 +179,6 @@ if 'Periode' in df_filtered.columns and 'Droping RS/Klinik Tujuan' in df_filtere
         .properties(width=950, height=400)
     )
     st.altair_chart(chart_trend_rs, use_container_width=True)
-
-# =========================
-# 🧪 DISTRIBUSI KOMPONEN
-# =========================
-st.subheader("🧪 Distribusi Menurut Komponen")
-if 'Komponen' in df_filtered.columns:
-    df_komp = df_filtered.groupby('Komponen')['Jumlah'].sum().reset_index()
-    chart_komp = (
-        alt.Chart(df_komp)
-        .mark_bar(color="#00FF80")
-        .encode(
-            x=alt.X('Komponen:N', title='Komponen'),
-            y=alt.Y('Jumlah:Q', title='Jumlah'),
-            tooltip=['Komponen', 'Jumlah']
-        )
-        .properties(width=950, height=300)
-    )
-    st.altair_chart(chart_komp, use_container_width=True)
-
-# =========================
-# 🏥 DISTRIBUSI MENURUT RS/KLINIK TUJUAN (BAR)
-# =========================
-st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan (Total Jumlah)")
-if 'Droping RS/Klinik Tujuan' in df_filtered.columns:
-    df_dist_rs = df_filtered.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
-    df_dist_rs = df_dist_rs.sort_values('Jumlah', ascending=False).head(15)
-    chart_dist_rs = (
-        alt.Chart(df_dist_rs)
-        .mark_bar(color="#33FF99")
-        .encode(
-            x=alt.X('Droping RS/Klinik Tujuan:N', sort='-y', title='RS/Klinik Tujuan'),
-            y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-            tooltip=['Droping RS/Klinik Tujuan', 'Jumlah']
-        )
-        .properties(width=950, height=350)
-    )
-    st.altair_chart(chart_dist_rs, use_container_width=True)
-
-# =========================
-# ⚗️ RHESUS POSITIF/NEGATIF
-# =========================
-st.subheader("🩸 Negatif dan Positif per Golongan Darah")
-if 'Rhesus' in df_filtered.columns and 'Golongan Darah' in df_filtered.columns:
-    df_rh = df_filtered.groupby(['Golongan Darah', 'Rhesus'])['Jumlah'].sum().reset_index()
-    chart_rh = (
-        alt.Chart(df_rh)
-        .mark_bar()
-        .encode(
-            x=alt.X('Golongan Darah:N'),
-            y=alt.Y('Jumlah:Q'),
-            color=alt.Color('Rhesus:N', scale=alt.Scale(scheme='redblue')),
-            tooltip=['Golongan Darah', 'Rhesus', 'Jumlah']
-        )
-        .properties(width=950, height=300)
-    )
-    st.altair_chart(chart_rh, use_container_width=True)
-
-# =========================
-# 📋 TABEL & GRAFIK RS/KLINIK
-# =========================
-st.subheader("🏥 Tabel & Grafik RS/Klinik Tujuan (Top 20)")
-if 'Droping RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
-    df_rs = df_filtered.groupby('Droping RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
-    df_rs = df_rs.sort_values('Jumlah', ascending=False)
-
-    col1, col2 = st.columns([1, 1.5])
-    with col1:
-        st.dataframe(df_rs.head(20), use_container_width=True, height=400)
-    with col2:
-        chart_rs = (
-            alt.Chart(df_rs.head(20))
-            .mark_bar(color="#0096FF")
-            .encode(
-                x=alt.X('Jumlah:Q', title='Total Jumlah'),
-                y=alt.Y('Droping RS/Klinik Tujuan:N', sort='-x', title='RS/Klinik'),
-                tooltip=['Droping RS/Klinik Tujuan', 'Jumlah']
-            )
-            .properties(width=800, height=400)
-        )
-        st.altair_chart(chart_rs, use_container_width=True)
 
 # =========================
 # 🧾 FOOTER
