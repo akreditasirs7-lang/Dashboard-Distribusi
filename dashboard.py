@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-from io import StringIO
+from io import BytesIO
 import math
 
 # =========================
@@ -27,17 +27,11 @@ st.markdown("""
         table {
             color: white !important;
         }
-        .pagination-btn {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-bottom: 10px;
-        }
     </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# 📊 AMBIL DATA
+# 📊 LOAD DATA
 # =========================
 url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=783347361&single=true&output=csv"
 
@@ -55,7 +49,7 @@ def load_data():
 df = load_data()
 
 # =========================
-# 🧠 FILTER DATA
+# 🧠 FILTER
 # =========================
 st.sidebar.markdown('<p class="sidebar-title">🎛️ Filter Data</p>', unsafe_allow_html=True)
 
@@ -65,7 +59,6 @@ jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=j
 form_list = df['Jenis Pengimputan'].dropna().unique().tolist()
 form_filter = st.sidebar.multiselect("Jenis Formulir:", form_list, default=form_list)
 
-# Filter RS
 rs_list = sorted(df['RS/Klinik Tujuan'].dropna().unique().tolist())
 select_all = st.sidebar.checkbox("Pilih Semua RS/Klinik Tujuan", value=True)
 if select_all:
@@ -73,7 +66,6 @@ if select_all:
 else:
     rs_filter = st.sidebar.multiselect("Pilih RS/Klinik Tujuan:", rs_list, default=[])
 
-# Filter Bulan
 st.sidebar.markdown("---")
 st.sidebar.markdown('<p class="sidebar-title">🗓️ Filter Menurut Bulan</p>', unsafe_allow_html=True)
 bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
@@ -104,60 +96,125 @@ st.markdown("#### Analisis Droping, Permintaan & Pemenuhan | Real-time dari Goog
 st.markdown("---")
 
 # =========================
-# 📦 DOWNLOAD DATA
+# 📥 DOWNLOAD DATA (EXCEL)
 # =========================
 st.subheader("📦 Download Data Terfilter")
-csv_buffer = StringIO()
-df_filtered.to_csv(csv_buffer, index=False)
+output = BytesIO()
+with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    df_filtered.to_excel(writer, index=False, sheet_name='Data Terfilter')
+    writer.save()
+excel_data = output.getvalue()
+
 st.download_button(
-    label="⬇️ Download Data (CSV)",
-    data=csv_buffer.getvalue(),
-    file_name="data_terfilter.csv",
-    mime="text/csv"
+    label="⬇️ Download Data (Excel)",
+    data=excel_data,
+    file_name="data_terfilter.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
 # =========================
-# 📈 TREND BULANAN (TOTAL)
+# 🧭 TOGGLE GRAFIK
 # =========================
-st.subheader("📊 Trend Bulanan (Total Jumlah)")
-if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
-    df_trend = df_filtered.groupby('Periode', as_index=False)['Jumlah'].sum().sort_values('Periode')
-    if len(df_trend) > 0:
-        chart_trend = (
-            alt.Chart(df_trend)
-            .mark_line(point=True, color='#00c4ff')
-            .encode(
-                x=alt.X('Periode:N', title='Periode (Bulan)'),
-                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-                tooltip=['Periode', 'Jumlah']
+show_graphs = st.toggle("🧭 Tampilkan Semua Grafik", value=True)
+
+# =========================
+# 📊 GRAFIK-GRAFIK
+# =========================
+if show_graphs:
+    # ---- TREND BULANAN ----
+    st.subheader("📊 Trend Bulanan (Total Jumlah)")
+    if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
+        df_trend = df_filtered.groupby('Periode', as_index=False)['Jumlah'].sum().sort_values('Periode')
+        if len(df_trend) > 0:
+            chart_trend = (
+                alt.Chart(df_trend)
+                .mark_line(point=True, color='#00c4ff')
+                .encode(
+                    x=alt.X('Periode:N', title='Periode (Bulan)'),
+                    y=alt.Y('Jumlah:Q', title='Total Jumlah'),
+                    tooltip=['Periode', 'Jumlah']
+                )
+                .properties(width=950, height=350)
             )
-            .properties(width=950, height=350)
+            st.altair_chart(chart_trend, use_container_width=True)
+
+    # ---- DISTRIBUSI RS/KLINIK ----
+    st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan (Total Jumlah)")
+    if 'RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
+        df_rs = df_filtered.groupby('RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
+        df_rs = df_rs.sort_values('Jumlah', ascending=False)
+        chart_rs = (
+            alt.Chart(df_rs)
+            .mark_bar(color="#33FF99")
+            .encode(
+                x=alt.X('RS/Klinik Tujuan:N', sort='-y', title='RS/Klinik Tujuan'),
+                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
+                tooltip=['RS/Klinik Tujuan', 'Jumlah']
+            )
+            .properties(width=950, height=400)
         )
-        st.altair_chart(chart_trend, use_container_width=True)
-    else:
-        st.warning("Tidak ada data untuk ditampilkan.")
+        st.altair_chart(chart_rs, use_container_width=True)
+
+    # ---- DISTRIBUSI KOMPONEN ----
+    st.subheader("🧪 Distribusi Menurut Komponen")
+    if 'Komponen' in df_filtered.columns:
+        df_komp = df_filtered.groupby('Komponen')['Jumlah'].sum().reset_index()
+        chart_komp = (
+            alt.Chart(df_komp)
+            .mark_bar(color="#FF7F50")
+            .encode(
+                x=alt.X('Komponen:N', sort='-y', title='Komponen'),
+                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
+                tooltip=['Komponen', 'Jumlah']
+            )
+            .properties(width=950, height=400)
+        )
+        text_komp = chart_komp.mark_text(
+            align='center', baseline='bottom', dy=-5, color='white'
+        ).encode(text=alt.Text('Jumlah:Q'))
+        st.altair_chart(chart_komp + text_komp, use_container_width=True)
+
+    # ---- DISTRIBUSI GOLONGAN DARAH ----
+    st.subheader("🩸 Distribusi Menurut Golongan Darah")
+    if 'Golongan Darah' in df_filtered.columns:
+        df_goldar = df_filtered.groupby('Golongan Darah')['Jumlah'].sum().reset_index()
+        chart_goldar = (
+            alt.Chart(df_goldar)
+            .mark_bar(color="#4FC3F7")
+            .encode(
+                x=alt.X('Golongan Darah:N', sort='-y', title='Golongan Darah'),
+                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
+                tooltip=['Golongan Darah', 'Jumlah']
+            )
+            .properties(width=950, height=400)
+        )
+        text_goldar = chart_goldar.mark_text(
+            align='center', baseline='bottom', dy=-5, color='white'
+        ).encode(text=alt.Text('Jumlah:Q'))
+        st.altair_chart(chart_goldar + text_goldar, use_container_width=True)
+
+    # ---- DISTRIBUSI RHESUS ----
+    st.subheader("🧬 Distribusi Rhesus (Positif vs Negatif)")
+    if 'Rhesus' in df_filtered.columns:
+        df_rhesus = df_filtered.groupby('Rhesus')['Jumlah'].sum().reset_index()
+        chart_rhesus = (
+            alt.Chart(df_rhesus)
+            .mark_bar()
+            .encode(
+                x=alt.X('Rhesus:N', title='Rhesus'),
+                y=alt.Y('Jumlah:Q', title='Total Jumlah'),
+                color=alt.Color('Rhesus:N', scale=alt.Scale(domain=['Positif', 'Negatif'], range=['#FF6B6B', '#4FC3F7'])),
+                tooltip=['Rhesus', 'Jumlah']
+            )
+            .properties(width=950, height=400)
+        )
+        text_rhesus = chart_rhesus.mark_text(
+            align='center', baseline='bottom', dy=-5, color='white'
+        ).encode(text=alt.Text('Jumlah:Q'))
+        st.altair_chart(chart_rhesus + text_rhesus, use_container_width=True)
 
 # =========================
-# 🏥 DISTRIBUSI MENURUT RS/KLINIK TUJUAN
-# =========================
-st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan (Total Jumlah)")
-if 'RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
-    df_rs = df_filtered.groupby('RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
-    df_rs = df_rs.sort_values('Jumlah', ascending=False)
-    chart_rs = (
-        alt.Chart(df_rs)
-        .mark_bar(color="#33FF99")
-        .encode(
-            x=alt.X('RS/Klinik Tujuan:N', sort='-y', title='RS/Klinik Tujuan'),
-            y=alt.Y('Jumlah:Q', title='Total Jumlah'),
-            tooltip=['RS/Klinik Tujuan', 'Jumlah']
-        )
-        .properties(width=950, height=400)
-    )
-    st.altair_chart(chart_rs, use_container_width=True)
-
-# =========================
-# 📋 DATA INPUT TERBARU (10 baris per halaman + tombol prev/next)
+# 📋 DATA INPUT TERBARU
 # =========================
 st.subheader("📋 Data Input Terbaru (10 Baris per Halaman)")
 page_size = 10
