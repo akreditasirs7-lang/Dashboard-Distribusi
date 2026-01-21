@@ -19,7 +19,6 @@ st.markdown("""
             color: #fafafa !important;
         }
         h1,h2,h3,h4 {color:#58a6ff;}
-        .stDataFrame {border-radius: 10px;}
         .sidebar-title {
             font-size: 18px;
             font-weight: 700;
@@ -27,6 +26,12 @@ st.markdown("""
         }
         table {
             color: white !important;
+        }
+        .pagination-btn {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 10px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -39,7 +44,7 @@ url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMat
 @st.cache_data(ttl=30)
 def load_data():
     df = pd.read_csv(url)
-    df = df.iloc[:, :10]  # ambil kolom A-J
+    df = df.iloc[:, :10]
     df.columns = [c.strip() for c in df.columns]
     if 'Tanggal Droping' in df.columns:
         df['Tanggal Droping'] = pd.to_datetime(df['Tanggal Droping'], errors='coerce')
@@ -75,7 +80,7 @@ bulan_list = sorted(df['Bulan'].dropna().unique().tolist())
 bulan_filter = st.sidebar.multiselect("Pilih Bulan:", bulan_list, default=bulan_list)
 
 # =========================
-# 🧩 FILTER LOGIKA
+# 🧩 LOGIKA FILTER
 # =========================
 df_filtered = df.copy()
 df_filtered = df_filtered[df_filtered['Jenis Permintaan'].isin(jenis_filter)]
@@ -112,7 +117,7 @@ st.download_button(
 )
 
 # =========================
-# 📈 TREND BULANAN
+# 📈 TREND BULANAN (TOTAL)
 # =========================
 st.subheader("📊 Trend Bulanan (Total Jumlah)")
 if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
@@ -133,19 +138,52 @@ if 'Periode' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
         st.warning("Tidak ada data untuk ditampilkan.")
 
 # =========================
-# 📋 DATA INPUT TERBARU (10 baris dengan pagination)
+# 🏥 DISTRIBUSI MENURUT RS/KLINIK TUJUAN
+# =========================
+st.subheader("🏥 Distribusi Menurut RS/Klinik Tujuan (Total Jumlah)")
+if 'RS/Klinik Tujuan' in df_filtered.columns and 'Jumlah' in df_filtered.columns:
+    df_rs = df_filtered.groupby('RS/Klinik Tujuan')['Jumlah'].sum().reset_index()
+    df_rs = df_rs.sort_values('Jumlah', ascending=False)
+    chart_rs = (
+        alt.Chart(df_rs)
+        .mark_bar(color="#33FF99")
+        .encode(
+            x=alt.X('RS/Klinik Tujuan:N', sort='-y', title='RS/Klinik Tujuan'),
+            y=alt.Y('Jumlah:Q', title='Total Jumlah'),
+            tooltip=['RS/Klinik Tujuan', 'Jumlah']
+        )
+        .properties(width=950, height=400)
+    )
+    st.altair_chart(chart_rs, use_container_width=True)
+
+# =========================
+# 📋 DATA INPUT TERBARU (10 baris per halaman + tombol prev/next)
 # =========================
 st.subheader("📋 Data Input Terbaru (10 Baris per Halaman)")
 page_size = 10
 total_rows = len(df_filtered)
 total_pages = math.ceil(total_rows / page_size)
 
+if "page_number" not in st.session_state:
+    st.session_state.page_number = 1
+
+col_prev, col_next = st.columns([1, 1])
+with col_prev:
+    if st.button("⬅️ Previous"):
+        if st.session_state.page_number > 1:
+            st.session_state.page_number -= 1
+with col_next:
+    if st.button("Next ➡️"):
+        if st.session_state.page_number < total_pages:
+            st.session_state.page_number += 1
+
+page_number = st.session_state.page_number
+start_idx = (page_number - 1) * page_size
+end_idx = start_idx + page_size
+
 if total_rows > 0:
-    page_number = st.number_input("Halaman:", min_value=1, max_value=total_pages, value=1, step=1)
-    start_idx = (page_number - 1) * page_size
-    end_idx = start_idx + page_size
-    st.dataframe(df_filtered.iloc[start_idx:end_idx], use_container_width=True)
-    st.caption(f"Menampilkan {start_idx+1}-{min(end_idx, total_rows)} dari {total_rows} baris.")
+    st.dataframe(df_filtered.iloc[start_idx:end_idx], use_container_width=True, height=380)
+    st.caption(f"📄 Halaman {page_number} dari {total_pages} | Menampilkan {start_idx+1}-{min(end_idx, total_rows)} dari {total_rows} baris.")
 else:
     st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
 
