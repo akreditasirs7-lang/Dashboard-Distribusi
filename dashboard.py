@@ -3,14 +3,14 @@ import pandas as pd
 import altair as alt
 from io import BytesIO
 import math
-from reportlab.lib.pagesizes import landscape, A4
 from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib.units import cm
 
 # =========================
 # ⚙️ KONFIGURASI DASAR
 # =========================
-st.set_page_config(page_title="Dashboard Permintaan vs Pemenuhan + PDF", layout="wide", page_icon="💉")
+st.set_page_config(page_title="Dashboard Perbandingan Permintaan vs Pemenuhan 2025–2026", layout="wide", page_icon="💉")
 
 # =========================
 # 🎨 PILIHAN TEMA
@@ -26,29 +26,29 @@ tema_style = {
         "background": "linear-gradient(135deg, #f8cdda 0%, #1d2b64 100%)",
         "text_color": "#fefefe",
         "title_color": "#ffe5ec",
-        "permintaan_color": "#1E90FF",
-        "pemenuhan_color": "#FF3030",
+        "permintaan_color": "#ff5f6d",
+        "pemenuhan_color": "#36cfc9",
     },
     "Biru–Toska": {
         "background": "linear-gradient(135deg, #00b4db 0%, #0083b0 100%)",
         "text_color": "#f9f9f9",
         "title_color": "#e0ffff",
-        "permintaan_color": "#00ffff",
-        "pemenuhan_color": "#ffcc00",
+        "permintaan_color": "#ffcc00",
+        "pemenuhan_color": "#00ffff",
     },
     "Dark Mode": {
         "background": "#0e1117",
         "text_color": "#fafafa",
         "title_color": "#58a6ff",
-        "permintaan_color": "#1f77b4",
-        "pemenuhan_color": "#d62728",
+        "permintaan_color": "#ff7f0e",
+        "pemenuhan_color": "#1f77b4",
     },
     "Kuning–Oranye": {
         "background": "linear-gradient(135deg, #f9d423 0%, #ff4e50 100%)",
         "text_color": "#222",
         "title_color": "#fff3cd",
-        "permintaan_color": "#ffa500",
-        "pemenuhan_color": "#ff6347",
+        "permintaan_color": "#ff8c00",
+        "pemenuhan_color": "#f3722c",
     }
 }
 
@@ -116,116 +116,106 @@ df_filtered = df[
 # =========================
 # 🧾 HEADER
 # =========================
-st.title("💉 Dashboard Batang Sejajar + PDF")
-st.markdown("#### 📊 Permintaan vs Pemenuhan | 2025–2026")
+st.title("💉 Dashboard Perbandingan Jenis Permintaan vs Pemenuhan (2025–2026)")
+st.markdown("#### 📊 Tampilan Kiri-Kanan untuk Analisis yang Lebih Jelas")
 st.markdown("---")
 
 # =========================
-# 📊 FUNGSI GRAFIK
+# 📊 FUNGSI CHART
 # =========================
-def dual_bar_chart(df, kategori, title, warna_kiri, warna_kanan):
-    df_group = (
-        df.groupby(["Jenis Pengimputan", kategori])["Jumlah"]
-        .sum()
-        .reset_index()
-    )
-    chart = (
-        alt.Chart(df_group)
-        .mark_bar()
+def chart_bar(df, title, color):
+    base = (
+        alt.Chart(df)
+        .mark_bar(color=color)
         .encode(
-            x=alt.X(f"{kategori}:N", sort='-y', title=kategori),
-            y=alt.Y("Jumlah:Q", title="Total Jumlah"),
-            color=alt.Color(
-                "Jenis Pengimputan:N",
-                scale=alt.Scale(domain=["Permintaan", "Pemenuhan"], range=[warna_kiri, warna_kanan]),
-                title="Jenis"
-            ),
-            tooltip=[kategori, "Jenis Pengimputan", "Jumlah"]
+            x=alt.X("Kategori:N", sort='-y', title="Kategori"),
+            y=alt.Y("Jumlah:Q", title="Total Jumlah", scale=alt.Scale(padding=20)),
+            tooltip=["Kategori", "Jumlah"]
         )
-        .properties(title=title, width=850, height=350)
+        .properties(width=430, height=360, title=title)
     )
-
     text = (
-        alt.Chart(df_group)
-        .mark_text(
-            align='center', baseline='bottom', dy=-5,
-            color='white', fontSize=12, fontWeight='bold'
-        )
-        .encode(
-            x=f"{kategori}:N",
-            y="Jumlah:Q",
-            detail="Jenis Pengimputan:N",
-            text="Jumlah:Q"
-        )
+        alt.Chart(df)
+        .mark_text(align="center", baseline="bottom", dy=-6, color="white", fontWeight="bold")
+        .encode(x="Kategori:N", y="Jumlah:Q", text="Jumlah:Q")
     )
-    return (chart + text)
+    return base + text
 
 # =========================
-# 📈 CHARTS
+# 📈 TREND PERBANDINGAN (SIDE BY SIDE)
 # =========================
-charts = []
-if "Komponen" in df_filtered.columns:
-    st.subheader("🧪 Komponen")
-    c1 = dual_bar_chart(df_filtered, "Komponen", "Perbandingan Komponen", theme["permintaan_color"], theme["pemenuhan_color"])
-    charts.append(("Komponen", df_filtered.groupby(["Jenis Pengimputan", "Komponen"])["Jumlah"].sum().reset_index()))
-    st.altair_chart(c1, use_container_width=True)
+st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan (Side-by-Side)")
+col1, col2 = st.columns(2)
 
-if "Golongan Darah" in df_filtered.columns:
-    st.subheader("🩸 Golongan Darah")
-    c2 = dual_bar_chart(df_filtered, "Golongan Darah", "Perbandingan Golongan Darah", theme["permintaan_color"], theme["pemenuhan_color"])
-    charts.append(("Golongan Darah", df_filtered.groupby(["Jenis Pengimputan", "Golongan Darah"])["Jumlah"].sum().reset_index()))
-    st.altair_chart(c2, use_container_width=True)
-
-if "RS/Klinik Tujuan" in df_filtered.columns:
-    st.subheader("🏥 RS/Klinik Tujuan (Top 10)")
-    df_top = df_filtered[df_filtered["RS/Klinik Tujuan"].isin(
-        df_filtered["RS/Klinik Tujuan"].value_counts().head(10).index
-    )]
-    c3 = dual_bar_chart(df_top, "RS/Klinik Tujuan", "Perbandingan RS/Klinik Tujuan", theme["permintaan_color"], theme["pemenuhan_color"])
-    charts.append(("RS/Klinik Tujuan", df_top.groupby(["Jenis Pengimputan", "RS/Klinik Tujuan"])["Jumlah"].sum().reset_index()))
-    st.altair_chart(c3, use_container_width=True)
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_trend = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby(["Tahun", "Bulan"], as_index=False)["Jumlah"]
+            .sum()
+            .sort_values(["Tahun", "Bulan"])
+        )
+        if not df_trend.empty:
+            chart = (
+                alt.Chart(df_trend)
+                .mark_line(point=True, color=warna)
+                .encode(
+                    x=alt.X("Bulan:N", title="Bulan"),
+                    y=alt.Y("Jumlah:Q", title="Jumlah", scale=alt.Scale(padding=20)),
+                    color="Tahun:N",
+                    tooltip=["Tahun", "Bulan", "Jumlah"],
+                )
+                .properties(title=f"📊 Trend Bulanan {jenis}", height=350)
+            )
+            st.altair_chart(chart, use_container_width=True)
 
 # =========================
-# 🧾 DOWNLOAD PDF (LANDSCAPE)
+# 📥 DOWNLOAD PDF (LANDSCAPE)
 # =========================
-if st.button("📄 Download PDF (Landscape)"):
+if st.button("📄 Download PDF (1 Halaman Landscape)"):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=landscape(A4))
     width, height = landscape(A4)
 
     c.setFont("Helvetica-Bold", 16)
     c.drawString(2*cm, height - 1.5*cm, f"Laporan Dashboard Permintaan vs Pemenuhan ({', '.join(map(str, tahun_pilihan))})")
-
     c.setFont("Helvetica", 10)
-    c.drawString(2*cm, height - 2.5*cm, f"Filter: {len(df_filtered)} data ditampilkan")
+    c.drawString(2*cm, height - 2.3*cm, f"Filter: {len(df_filtered)} Data | Bulan: {', '.join(bulan_filter)}")
 
     y = height - 3.5*cm
-    for title, df_part in charts:
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(2*cm, y, title)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(2*cm, y, "📊 Ringkasan Data")
+    y -= 0.8*cm
+    c.setFont("Helvetica", 9)
+    summary = df_filtered.groupby("Jenis Pengimputan")["Jumlah"].sum()
+    for jenis, val in summary.items():
+        c.drawString(3*cm, y, f"• {jenis}: {val:,}")
         y -= 0.5*cm
-        c.setFont("Helvetica", 9)
-        grouped = df_part.groupby("Jenis Pengimputan")["Jumlah"].sum()
-        for jenis, val in grouped.items():
-            c.drawString(3*cm, y, f"• {jenis}: {val:,}")
-            y -= 0.4*cm
-        y -= 0.3*cm
-        if y < 3*cm:
-            c.showPage()
-            y = height - 3.5*cm
-    c.save()
 
+    y -= 0.8*cm
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(2*cm, y, "🧪 Top 5 Komponen")
+    y -= 0.7*cm
+    c.setFont("Helvetica", 9)
+    top_komp = (
+        df_filtered.groupby("Komponen")["Jumlah"].sum().sort_values(ascending=False).head(5)
+    )
+    for komp, val in top_komp.items():
+        c.drawString(3*cm, y, f"- {komp}: {val:,}")
+        y -= 0.5*cm
+
+    c.save()
     st.download_button(
-        label="⬇️ Simpan PDF Laporan",
+        label="⬇️ Simpan PDF (Laporan)",
         data=buffer.getvalue(),
-        file_name="Laporan_Permintaan_Pemenuhan.pdf",
+        file_name="Dashboard_Permintaan_Pemenuhan.pdf",
         mime="application/pdf"
     )
 
 # =========================
 # 📦 DOWNLOAD EXCEL
 # =========================
-st.subheader("📦 Download Data Excel")
+st.subheader("📦 Download Data Terfilter (Excel)")
 output = BytesIO()
 with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
     df_filtered.to_excel(writer, index=False, sheet_name="Data Terfilter")
@@ -233,12 +223,12 @@ with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
 st.download_button(
     label="⬇️ Download Data (Excel)",
     data=output.getvalue(),
-    file_name="data_dashboard_2025_2026.xlsx",
+    file_name="data_side_by_side_2025_2026.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
 # =========================
-# 📋 DATA TABLE
+# 📋 TABEL DATA
 # =========================
 st.subheader("📋 Data Input (10 Baris per Halaman)")
 page_size = 10
@@ -266,4 +256,4 @@ else:
     st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
 
 st.markdown("---")
-st.caption("📊 Dashboard Batang Sejajar + PDF | 💉 Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
+st.caption("📊 Dashboard Side-by-Side 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
