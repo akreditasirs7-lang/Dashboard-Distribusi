@@ -6,6 +6,9 @@ import math
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib.units import cm
+from PIL import Image
+import tempfile
+import os
 
 # =========================
 # ⚙️ KONFIGURASI DASAR
@@ -81,44 +84,25 @@ def load_data(url, tahun):
     df["Tahun"] = tahun
     if "Bulan" in df.columns:
         df["Periode"] = df["Bulan"].astype(str) + " " + df["Tahun"].astype(str)
-    if "Tanggal Droping" in df.columns:
-        df["Tanggal Droping"] = pd.to_datetime(df["Tanggal Droping"], errors="coerce")
     return df
 
-df_2025 = load_data(urls[2025], 2025)
-df_2026 = load_data(urls[2026], 2026)
-df_all = pd.concat([df_2025, df_2026], ignore_index=True)
+df_all = pd.concat([load_data(urls[2025], 2025), load_data(urls[2026], 2026)], ignore_index=True)
 
 # =========================
-# 📆 PILIH TAHUN
+# 📆 FILTER
 # =========================
 tahun_pilihan = st.sidebar.multiselect("📆 Pilih Tahun:", [2025, 2026], default=[2025, 2026])
 df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
 
-# =========================
-# 🎛️ FILTER DATA
-# =========================
-jenis_list = df["Jenis Permintaan"].dropna().unique().tolist()
-jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
-
-rs_list = sorted(df["RS/Klinik Tujuan"].dropna().unique().tolist())
-rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", rs_list, default=rs_list)
-
-bulan_list = sorted(df["Bulan"].dropna().unique().tolist())
-bulan_filter = st.sidebar.multiselect("🗓️ Pilih Bulan:", bulan_list, default=bulan_list)
+jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", df["Jenis Permintaan"].dropna().unique().tolist())
+rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", df["RS/Klinik Tujuan"].dropna().unique().tolist())
+bulan_filter = st.sidebar.multiselect("🗓️ Pilih Bulan:", sorted(df["Bulan"].dropna().unique().tolist()))
 
 df_filtered = df[
     df["Jenis Permintaan"].isin(jenis_filter)
     & df["RS/Klinik Tujuan"].isin(rs_filter)
     & df["Bulan"].isin(bulan_filter)
 ]
-
-# =========================
-# 🧾 HEADER
-# =========================
-st.title("💉 Dashboard Distribusi & Pelayanan Darah 2025–2026")
-st.markdown("#### 📊 Bandingkan Permintaan dan Pemenuhan Berdasarkan Kategori Utama")
-st.markdown("---")
 
 # =========================
 # 📊 FUNGSI CHART
@@ -132,24 +116,31 @@ def chart_bar(df, title, color):
             y=alt.Y("Jumlah:Q", title="Total Jumlah", scale=alt.Scale(padding=25)),
             tooltip=["Kategori", "Jumlah"]
         )
-        .properties(width=500, height=370, title=title)
+        .properties(width=500, height=350, title=title)
     )
     text = (
         alt.Chart(df)
-        .mark_text(align="center", baseline="bottom", dy=-6, color="white", fontWeight="bold")
+        .mark_text(align="center", baseline="bottom", dy=-5, color="white", fontWeight="bold")
         .encode(x="Kategori:N", y="Jumlah:Q", text="Jumlah:Q")
     )
     return base + text
 
 # =========================
-# 🔘 TOGGLE CHARTS
+# 🧾 HEADER
 # =========================
-st.sidebar.header("📊 Tampilkan / Sembunyikan Chart")
+st.title("💉 Dashboard Distribusi & Pelayanan Darah 2025–2026")
+
+# =========================
+# TOGGLE CHART
+# =========================
+st.sidebar.header("📊 Pilih Chart yang Ditampilkan")
 show_trend = st.sidebar.checkbox("📈 Trend Bulanan", True)
 show_rs = st.sidebar.checkbox("🏥 RS/Klinik Tujuan", True)
 show_goldar = st.sidebar.checkbox("🩸 Golongan Darah", True)
 show_rhesus = st.sidebar.checkbox("🧬 Rhesus", True)
 show_komponen = st.sidebar.checkbox("🧪 Komponen", True)
+
+chart_files = []
 
 # =========================
 # 📈 TREND BULANAN
@@ -164,131 +155,94 @@ if show_trend:
                 df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
                 .groupby(["Tahun", "Bulan"], as_index=False)["Jumlah"]
                 .sum()
-                .sort_values(["Tahun", "Bulan"])
             )
             if not df_trend.empty:
                 chart = (
                     alt.Chart(df_trend)
                     .mark_line(point=True, color=warna)
-                    .encode(
-                        x=alt.X("Bulan:N", title="Bulan"),
-                        y=alt.Y("Jumlah:Q", title="Jumlah", scale=alt.Scale(padding=20)),
-                        color="Tahun:N",
-                        tooltip=["Tahun", "Bulan", "Jumlah"],
-                    )
-                    .properties(title=f"📊 Trend Bulanan {jenis}", height=350)
+                    .encode(x="Bulan:N", y="Jumlah:Q", color="Tahun:N")
+                    .properties(title=f"Trend Bulanan {jenis}")
                 )
                 st.altair_chart(chart, use_container_width=True)
+                # Simpan chart ke file sementara
+                temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                chart.save(temp.name)
+                chart_files.append((f"Trend Bulanan {jenis}", temp.name))
 
 # =========================
-# 🏥 RS/KLINIK TUJUAN
+# FUNGSI TAMBAH CHART KATEGORI
+# =========================
+def add_chart(df_filtered, kategori, title_prefix):
+    col1, col2 = st.columns(2)
+    for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2],
+                                 [theme['permintaan_color'], theme['pemenuhan_color']]):
+        with col:
+            df_cat = (
+                df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+                .groupby(kategori, as_index=False)["Jumlah"]
+                .sum()
+                .rename(columns={kategori: "Kategori"})
+            )
+            if not df_cat.empty:
+                chart = chart_bar(df_cat, f"{jenis} per {title_prefix}", warna)
+                st.altair_chart(chart, use_container_width=True)
+                temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                chart.save(temp.name)
+                chart_files.append((f"{jenis} per {title_prefix}", temp.name))
+
+# =========================
+# CHART TAMBAHAN
 # =========================
 if show_rs:
-    st.subheader("🏥 Distribusi per RS/Klinik Tujuan (Kiri-Kanan)")
-    col1, col2 = st.columns(2)
-    for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2],
-                                 [theme['permintaan_color'], theme['pemenuhan_color']]):
-        with col:
-            df_rs = (
-                df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-                .groupby("RS/Klinik Tujuan", as_index=False)["Jumlah"]
-                .sum()
-                .rename(columns={"RS/Klinik Tujuan": "Kategori"})
-                .sort_values("Jumlah", ascending=False)
-                .head(10)
-            )
-            if not df_rs.empty:
-                st.altair_chart(chart_bar(df_rs, f"{jenis} per RS/Klinik Tujuan (Top 10)", warna), use_container_width=True)
+    st.subheader("🏥 Distribusi RS/Klinik Tujuan")
+    add_chart(df_filtered, "RS/Klinik Tujuan", "RS/Klinik Tujuan")
 
-# =========================
-# 🩸 GOLONGAN DARAH
-# =========================
 if show_goldar:
-    st.subheader("🩸 Perbandingan Golongan Darah (Kiri-Kanan)")
-    col1, col2 = st.columns(2)
-    for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2],
-                                 [theme['permintaan_color'], theme['pemenuhan_color']]):
-        with col:
-            df_goldar = (
-                df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-                .groupby("Golongan Darah", as_index=False)["Jumlah"]
-                .sum()
-                .rename(columns={"Golongan Darah": "Kategori"})
-            )
-            if not df_goldar.empty:
-                st.altair_chart(chart_bar(df_goldar, f"{jenis} per Golongan Darah", warna), use_container_width=True)
+    st.subheader("🩸 Golongan Darah")
+    add_chart(df_filtered, "Golongan Darah", "Golongan Darah")
 
-# =========================
-# 🧬 RHESUS
-# =========================
 if show_rhesus:
-    st.subheader("🧬 Perbandingan Rhesus (Kiri-Kanan)")
-    col1, col2 = st.columns(2)
-    for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2],
-                                 [theme['permintaan_color'], theme['pemenuhan_color']]):
-        with col:
-            df_rhesus = (
-                df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-                .groupby("Rhesus", as_index=False)["Jumlah"]
-                .sum()
-                .rename(columns={"Rhesus": "Kategori"})
-            )
-            if not df_rhesus.empty:
-                st.altair_chart(chart_bar(df_rhesus, f"{jenis} per Rhesus", warna), use_container_width=True)
+    st.subheader("🧬 Rhesus")
+    add_chart(df_filtered, "Rhesus", "Rhesus")
 
-# =========================
-# 🧪 KOMPONEN
-# =========================
 if show_komponen:
-    st.subheader("🧪 Perbandingan Komponen (Kiri-Kanan)")
-    col1, col2 = st.columns(2)
-    for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2],
-                                 [theme['permintaan_color'], theme['pemenuhan_color']]):
-        with col:
-            df_komp = (
-                df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-                .groupby("Komponen", as_index=False)["Jumlah"]
-                .sum()
-                .rename(columns={"Komponen": "Kategori"})
-            )
-            if not df_komp.empty:
-                st.altair_chart(chart_bar(df_komp, f"{jenis} per Komponen", warna), use_container_width=True)
+    st.subheader("🧪 Komponen")
+    add_chart(df_filtered, "Komponen", "Komponen")
 
 # =========================
-# 📥 DOWNLOAD PDF (LANDSCAPE)
+# 📄 DOWNLOAD PDF (DENGAN SEMUA CHART)
 # =========================
-if st.button("📄 Download PDF (1 Halaman Landscape)"):
+if st.button("📄 Download PDF (Termasuk Semua Chart)"):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=landscape(A4))
     width, height = landscape(A4)
-
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(2*cm, height - 1.5*cm, f"Laporan Dashboard Darah ({', '.join(map(str, tahun_pilihan))})")
-    c.setFont("Helvetica", 10)
-    c.drawString(2*cm, height - 2.3*cm, f"Filter: {len(df_filtered)} data | Bulan: {', '.join(bulan_filter)}")
-
-    y = height - 3.5*cm
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(2*cm, y, "📊 Ringkasan Data")
-    y -= 0.8*cm
-    c.setFont("Helvetica", 9)
-    summary = df_filtered.groupby("Jenis Pengimputan")["Jumlah"].sum()
-    for jenis, val in summary.items():
-        c.drawString(3*cm, y, f"• {jenis}: {val:,}")
+    c.drawString(2*cm, height - 1.5*cm, "📊 Laporan Dashboard Distribusi & Pelayanan Darah")
+    y = height - 3.0*cm
+    for title, img_path in chart_files:
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(2*cm, y, title)
         y -= 0.5*cm
-
+        img = Image.open(img_path)
+        img_width = 20*cm
+        img_height = 8*cm
+        if y - img_height < 2*cm:
+            c.showPage()
+            y = height - 2.5*cm
+        c.drawImage(img_path, 2*cm, y - img_height, width=img_width, height=img_height)
+        y -= img_height + 1*cm
     c.save()
+
     st.download_button(
-        label="⬇️ Simpan PDF (Laporan)",
+        label="⬇️ Simpan PDF (Lengkap)",
         data=buffer.getvalue(),
-        file_name="Laporan_Dashboard_Darah.pdf",
+        file_name="Laporan_Dashboard_Darah_Lengkap.pdf",
         mime="application/pdf"
     )
 
 # =========================
-# 📦 DOWNLOAD EXCEL
+# DOWNLOAD EXCEL
 # =========================
-st.subheader("📦 Download Data Terfilter (Excel)")
 output = BytesIO()
 with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
     df_filtered.to_excel(writer, index=False, sheet_name="Data Terfilter")
@@ -301,7 +255,7 @@ st.download_button(
 )
 
 # =========================
-# 📋 DATA TABLE
+# TABEL
 # =========================
 st.subheader("📋 Data Input (10 Baris per Halaman)")
 page_size = 10
@@ -323,10 +277,6 @@ start_idx = (page_number - 1) * page_size
 end_idx = start_idx + page_size
 
 if total_rows > 0:
-    st.dataframe(df_filtered.iloc[start_idx:end_idx], use_container_width=True, height=380)
-    st.caption(f"📄 Halaman {page_number} dari {total_pages} | Menampilkan {start_idx+1}-{min(end_idx, total_rows)} dari {total_rows} baris.")
+    st.dataframe(df_filtered.iloc[start_idx:end_idx], use_container_width=True)
 else:
     st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
-
-st.markdown("---")
-st.caption("📊 Dashboard Distribusi & Pelayanan Darah 2025–2026 | 💉 Dibuat dengan ❤️ pakai Streamlit & Altair")
