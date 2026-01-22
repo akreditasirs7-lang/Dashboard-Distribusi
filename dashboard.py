@@ -145,10 +145,40 @@ def chart_bar(df, title, color):
 # 🔘 TOGGLE CHARTS
 # =========================
 st.sidebar.header("📊 Tampilkan / Sembunyikan Chart")
+show_trend = st.sidebar.checkbox("📈 Trend Bulanan", True)
 show_rs = st.sidebar.checkbox("🏥 RS/Klinik Tujuan", True)
 show_goldar = st.sidebar.checkbox("🩸 Golongan Darah", True)
 show_rhesus = st.sidebar.checkbox("🧬 Rhesus", True)
 show_komponen = st.sidebar.checkbox("🧪 Komponen", True)
+
+# =========================
+# 📈 TREND BULANAN
+# =========================
+if show_trend:
+    st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan (Side-by-Side)")
+    col1, col2 = st.columns(2)
+    for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2],
+                                 [theme['permintaan_color'], theme['pemenuhan_color']]):
+        with col:
+            df_trend = (
+                df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+                .groupby(["Tahun", "Bulan"], as_index=False)["Jumlah"]
+                .sum()
+                .sort_values(["Tahun", "Bulan"])
+            )
+            if not df_trend.empty:
+                chart = (
+                    alt.Chart(df_trend)
+                    .mark_line(point=True, color=warna)
+                    .encode(
+                        x=alt.X("Bulan:N", title="Bulan"),
+                        y=alt.Y("Jumlah:Q", title="Jumlah", scale=alt.Scale(padding=20)),
+                        color="Tahun:N",
+                        tooltip=["Tahun", "Bulan", "Jumlah"],
+                    )
+                    .properties(title=f"📊 Trend Bulanan {jenis}", height=350)
+                )
+                st.altair_chart(chart, use_container_width=True)
 
 # =========================
 # 🏥 RS/KLINIK TUJUAN
