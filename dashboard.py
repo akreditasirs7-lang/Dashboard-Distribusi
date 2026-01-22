@@ -76,7 +76,7 @@ urls = {
     2026: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=783347361&single=true&output=csv"
 }
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=120)
 def load_data(url, tahun):
     df = pd.read_csv(url)
     df = df.iloc[:, :10]
@@ -94,9 +94,9 @@ df_all = pd.concat([load_data(urls[2025], 2025), load_data(urls[2026], 2026)], i
 tahun_pilihan = st.sidebar.multiselect("📆 Pilih Tahun:", [2025, 2026], default=[2025, 2026])
 df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
 
-jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", df["Jenis Permintaan"].dropna().unique().tolist())
-rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", df["RS/Klinik Tujuan"].dropna().unique().tolist())
-bulan_filter = st.sidebar.multiselect("🗓️ Pilih Bulan:", sorted(df["Bulan"].dropna().unique().tolist()))
+jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", df["Jenis Permintaan"].dropna().unique().tolist(), default=df["Jenis Permintaan"].dropna().unique().tolist())
+rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", df["RS/Klinik Tujuan"].dropna().unique().tolist(), default=df["RS/Klinik Tujuan"].dropna().unique().tolist())
+bulan_filter = st.sidebar.multiselect("🗓️ Pilih Bulan:", sorted(df["Bulan"].dropna().unique().tolist()), default=sorted(df["Bulan"].dropna().unique().tolist()))
 
 df_filtered = df[
     df["Jenis Permintaan"].isin(jenis_filter)
@@ -116,19 +116,14 @@ def chart_bar(df, title, color):
             y=alt.Y("Jumlah:Q", title="Total Jumlah", scale=alt.Scale(padding=25)),
             tooltip=["Kategori", "Jumlah"]
         )
-        .properties(width=500, height=350, title=title)
+        .properties(width=480, height=350, title=title)
     )
     text = (
         alt.Chart(df)
-        .mark_text(align="center", baseline="bottom", dy=-5, color="white", fontWeight="bold")
+        .mark_text(align="center", baseline="bottom", dy=-6, color="white", fontWeight="bold")
         .encode(x="Kategori:N", y="Jumlah:Q", text="Jumlah:Q")
     )
     return base + text
-
-# =========================
-# 🧾 HEADER
-# =========================
-st.title("💉 Dashboard Distribusi & Pelayanan Darah 2025–2026")
 
 # =========================
 # TOGGLE CHART
@@ -143,7 +138,7 @@ show_komponen = st.sidebar.checkbox("🧪 Komponen", True)
 chart_files = []
 
 # =========================
-# 📈 TREND BULANAN
+# TREND BULANAN
 # =========================
 if show_trend:
     st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan (Side-by-Side)")
@@ -164,13 +159,15 @@ if show_trend:
                     .properties(title=f"Trend Bulanan {jenis}")
                 )
                 st.altair_chart(chart, use_container_width=True)
-                # Simpan chart ke file sementara
-                temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                chart.save(temp.name)
-                chart_files.append((f"Trend Bulanan {jenis}", temp.name))
+                try:
+                    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                    chart.save(temp.name)
+                    chart_files.append((f"Trend Bulanan {jenis}", temp.name))
+                except Exception as e:
+                    st.warning(f"⚠️ Gagal export chart Trend {jenis}: {e}")
 
 # =========================
-# FUNGSI TAMBAH CHART KATEGORI
+# FUNGSI TAMBAH CHART
 # =========================
 def add_chart(df_filtered, kategori, title_prefix):
     col1, col2 = st.columns(2)
@@ -186,12 +183,15 @@ def add_chart(df_filtered, kategori, title_prefix):
             if not df_cat.empty:
                 chart = chart_bar(df_cat, f"{jenis} per {title_prefix}", warna)
                 st.altair_chart(chart, use_container_width=True)
-                temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                chart.save(temp.name)
-                chart_files.append((f"{jenis} per {title_prefix}", temp.name))
+                try:
+                    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                    chart.save(temp.name)
+                    chart_files.append((f"{jenis} per {title_prefix}", temp.name))
+                except Exception as e:
+                    st.warning(f"⚠️ Gagal export chart {title_prefix}: {e}")
 
 # =========================
-# CHART TAMBAHAN
+# TAMBAHAN CHART
 # =========================
 if show_rs:
     st.subheader("🏥 Distribusi RS/Klinik Tujuan")
@@ -210,27 +210,30 @@ if show_komponen:
     add_chart(df_filtered, "Komponen", "Komponen")
 
 # =========================
-# 📄 DOWNLOAD PDF (DENGAN SEMUA CHART)
+# DOWNLOAD PDF
 # =========================
-if st.button("📄 Download PDF (Termasuk Semua Chart)"):
+if st.button("📄 Download PDF (Semua Chart)"):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=landscape(A4))
     width, height = landscape(A4)
     c.setFont("Helvetica-Bold", 16)
     c.drawString(2*cm, height - 1.5*cm, "📊 Laporan Dashboard Distribusi & Pelayanan Darah")
-    y = height - 3.0*cm
+
+    y = height - 3*cm
     for title, img_path in chart_files:
         c.setFont("Helvetica-Bold", 12)
         c.drawString(2*cm, y, title)
         y -= 0.5*cm
-        img = Image.open(img_path)
-        img_width = 20*cm
-        img_height = 8*cm
-        if y - img_height < 2*cm:
+        if y < 3*cm:
             c.showPage()
             y = height - 2.5*cm
-        c.drawImage(img_path, 2*cm, y - img_height, width=img_width, height=img_height)
-        y -= img_height + 1*cm
+        try:
+            img = Image.open(img_path)
+            c.drawImage(img_path, 2*cm, y - 8*cm, width=20*cm, height=8*cm)
+        except Exception as e:
+            c.setFont("Helvetica", 10)
+            c.drawString(2*cm, y - 1*cm, f"Gagal menampilkan {title}: {e}")
+        y -= 9*cm
     c.save()
 
     st.download_button(
