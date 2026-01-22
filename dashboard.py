@@ -3,17 +3,11 @@ import pandas as pd
 import altair as alt
 from io import BytesIO
 import math
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import landscape, A4
-from reportlab.lib.units import cm
-from PIL import Image
-import tempfile
-import os
 
 # =========================
 # ⚙️ KONFIGURASI DASAR
 # =========================
-st.set_page_config(page_title="Dashboard Distribusi & Pelayanan Darah 2025–2026", layout="wide", page_icon="💉")
+st.set_page_config(page_title="Dashboard Perbandingan Permintaan vs Pemenuhan 2025–2026", layout="wide", page_icon="💉")
 
 # =========================
 # 🎨 PILIHAN TEMA
@@ -76,7 +70,7 @@ urls = {
     2026: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=783347361&single=true&output=csv"
 }
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def load_data(url, tahun):
     df = pd.read_csv(url)
     df = df.iloc[:, :10]
@@ -84,25 +78,44 @@ def load_data(url, tahun):
     df["Tahun"] = tahun
     if "Bulan" in df.columns:
         df["Periode"] = df["Bulan"].astype(str) + " " + df["Tahun"].astype(str)
+    if "Tanggal Droping" in df.columns:
+        df["Tanggal Droping"] = pd.to_datetime(df["Tanggal Droping"], errors="coerce")
     return df
 
-df_all = pd.concat([load_data(urls[2025], 2025), load_data(urls[2026], 2026)], ignore_index=True)
+df_2025 = load_data(urls[2025], 2025)
+df_2026 = load_data(urls[2026], 2026)
+df_all = pd.concat([df_2025, df_2026], ignore_index=True)
 
 # =========================
-# 📆 FILTER
+# 📆 PILIH TAHUN
 # =========================
 tahun_pilihan = st.sidebar.multiselect("📆 Pilih Tahun:", [2025, 2026], default=[2025, 2026])
 df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
 
-jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", df["Jenis Permintaan"].dropna().unique().tolist(), default=df["Jenis Permintaan"].dropna().unique().tolist())
-rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", df["RS/Klinik Tujuan"].dropna().unique().tolist(), default=df["RS/Klinik Tujuan"].dropna().unique().tolist())
-bulan_filter = st.sidebar.multiselect("🗓️ Pilih Bulan:", sorted(df["Bulan"].dropna().unique().tolist()), default=sorted(df["Bulan"].dropna().unique().tolist()))
+# =========================
+# 🎛️ FILTER DATA
+# =========================
+jenis_list = df["Jenis Permintaan"].dropna().unique().tolist()
+jenis_filter = st.sidebar.multiselect("Jenis Distribusi:", jenis_list, default=jenis_list)
+
+rs_list = sorted(df["RS/Klinik Tujuan"].dropna().unique().tolist())
+rs_filter = st.sidebar.multiselect("RS/Klinik Tujuan:", rs_list, default=rs_list)
+
+bulan_list = sorted(df["Bulan"].dropna().unique().tolist())
+bulan_filter = st.sidebar.multiselect("🗓️ Pilih Bulan:", bulan_list, default=bulan_list)
 
 df_filtered = df[
     df["Jenis Permintaan"].isin(jenis_filter)
     & df["RS/Klinik Tujuan"].isin(rs_filter)
     & df["Bulan"].isin(bulan_filter)
 ]
+
+# =========================
+# 🧾 HEADER
+# =========================
+st.title("💉 Dashboard Perbandingan Jenis Permintaan vs Pemenuhan (2025–2026)")
+st.markdown("#### 📊 Tampilan Kiri-Kanan untuk Analisis yang Lebih Jelas")
+st.markdown("---")
 
 # =========================
 # 📊 FUNGSI CHART
@@ -113,139 +126,104 @@ def chart_bar(df, title, color):
         .mark_bar(color=color)
         .encode(
             x=alt.X("Kategori:N", sort='-y', title="Kategori"),
-            y=alt.Y("Jumlah:Q", title="Total Jumlah", scale=alt.Scale(padding=25)),
+            y=alt.Y("Jumlah:Q", title="Total Jumlah"),
             tooltip=["Kategori", "Jumlah"]
         )
-        .properties(width=480, height=350, title=title)
+        .properties(width=430, height=350, title=title)
     )
     text = (
         alt.Chart(df)
-        .mark_text(align="center", baseline="bottom", dy=-6, color="white", fontWeight="bold")
+        .mark_text(align="center", baseline="bottom", dy=-8, color="#111", fontWeight="bold")
         .encode(x="Kategori:N", y="Jumlah:Q", text="Jumlah:Q")
     )
     return base + text
 
 # =========================
-# TOGGLE CHART
+# 📈 TREND PERBANDINGAN (SIDE BY SIDE)
 # =========================
-st.sidebar.header("📊 Pilih Chart yang Ditampilkan")
-show_trend = st.sidebar.checkbox("📈 Trend Bulanan", True)
-show_rs = st.sidebar.checkbox("🏥 RS/Klinik Tujuan", True)
-show_goldar = st.sidebar.checkbox("🩸 Golongan Darah", True)
-show_rhesus = st.sidebar.checkbox("🧬 Rhesus", True)
-show_komponen = st.sidebar.checkbox("🧪 Komponen", True)
+st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan (Side-by-Side)")
 
-chart_files = []
+col1, col2 = st.columns(2)
 
-# =========================
-# TREND BULANAN
-# =========================
-if show_trend:
-    st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan (Side-by-Side)")
-    col1, col2 = st.columns(2)
-    for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2],
-                                 [theme['permintaan_color'], theme['pemenuhan_color']]):
-        with col:
-            df_trend = (
-                df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-                .groupby(["Tahun", "Bulan"], as_index=False)["Jumlah"]
-                .sum()
-            )
-            if not df_trend.empty:
-                chart = (
-                    alt.Chart(df_trend)
-                    .mark_line(point=True, color=warna)
-                    .encode(x="Bulan:N", y="Jumlah:Q", color="Tahun:N")
-                    .properties(title=f"Trend Bulanan {jenis}")
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_trend = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby(["Tahun", "Bulan"], as_index=False)["Jumlah"]
+            .sum()
+            .sort_values(["Tahun", "Bulan"])
+        )
+        if not df_trend.empty:
+            chart = (
+                alt.Chart(df_trend)
+                .mark_line(point=True, color=warna)
+                .encode(
+                    x="Bulan:N",
+                    y="Jumlah:Q",
+                    color="Tahun:N",
+                    tooltip=["Tahun", "Bulan", "Jumlah"],
                 )
-                st.altair_chart(chart, use_container_width=True)
-                try:
-                    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                    chart.save(temp.name)
-                    chart_files.append((f"Trend Bulanan {jenis}", temp.name))
-                except Exception as e:
-                    st.warning(f"⚠️ Gagal export chart Trend {jenis}: {e}")
-
-# =========================
-# FUNGSI TAMBAH CHART
-# =========================
-def add_chart(df_filtered, kategori, title_prefix):
-    col1, col2 = st.columns(2)
-    for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2],
-                                 [theme['permintaan_color'], theme['pemenuhan_color']]):
-        with col:
-            df_cat = (
-                df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-                .groupby(kategori, as_index=False)["Jumlah"]
-                .sum()
-                .rename(columns={kategori: "Kategori"})
+                .properties(title=f"📊 Trend Bulanan {jenis}")
             )
-            if not df_cat.empty:
-                chart = chart_bar(df_cat, f"{jenis} per {title_prefix}", warna)
-                st.altair_chart(chart, use_container_width=True)
-                try:
-                    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                    chart.save(temp.name)
-                    chart_files.append((f"{jenis} per {title_prefix}", temp.name))
-                except Exception as e:
-                    st.warning(f"⚠️ Gagal export chart {title_prefix}: {e}")
+            st.altair_chart(chart, use_container_width=True)
 
 # =========================
-# TAMBAHAN CHART
+# 🧪 KOMONEN SIDE BY SIDE
 # =========================
-if show_rs:
-    st.subheader("🏥 Distribusi RS/Klinik Tujuan")
-    add_chart(df_filtered, "RS/Klinik Tujuan", "RS/Klinik Tujuan")
+st.subheader("🧪 Perbandingan Komponen (Kiri-Kanan)")
+col1, col2 = st.columns(2)
 
-if show_goldar:
-    st.subheader("🩸 Golongan Darah")
-    add_chart(df_filtered, "Golongan Darah", "Golongan Darah")
-
-if show_rhesus:
-    st.subheader("🧬 Rhesus")
-    add_chart(df_filtered, "Rhesus", "Rhesus")
-
-if show_komponen:
-    st.subheader("🧪 Komponen")
-    add_chart(df_filtered, "Komponen", "Komponen")
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_komp = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby("Komponen", as_index=False)["Jumlah"]
+            .sum()
+            .rename(columns={"Komponen": "Kategori"})
+        )
+        if not df_komp.empty:
+            st.altair_chart(chart_bar(df_komp, f"{jenis} per Komponen", warna), use_container_width=True)
 
 # =========================
-# DOWNLOAD PDF
+# 🩸 GOLONGAN DARAH SIDE BY SIDE
 # =========================
-if st.button("📄 Download PDF (Semua Chart)"):
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=landscape(A4))
-    width, height = landscape(A4)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(2*cm, height - 1.5*cm, "📊 Laporan Dashboard Distribusi & Pelayanan Darah")
+st.subheader("🩸 Perbandingan Golongan Darah (Kiri-Kanan)")
+col1, col2 = st.columns(2)
 
-    y = height - 3*cm
-    for title, img_path in chart_files:
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(2*cm, y, title)
-        y -= 0.5*cm
-        if y < 3*cm:
-            c.showPage()
-            y = height - 2.5*cm
-        try:
-            img = Image.open(img_path)
-            c.drawImage(img_path, 2*cm, y - 8*cm, width=20*cm, height=8*cm)
-        except Exception as e:
-            c.setFont("Helvetica", 10)
-            c.drawString(2*cm, y - 1*cm, f"Gagal menampilkan {title}: {e}")
-        y -= 9*cm
-    c.save()
-
-    st.download_button(
-        label="⬇️ Simpan PDF (Lengkap)",
-        data=buffer.getvalue(),
-        file_name="Laporan_Dashboard_Darah_Lengkap.pdf",
-        mime="application/pdf"
-    )
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_goldar = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby("Golongan Darah", as_index=False)["Jumlah"]
+            .sum()
+            .rename(columns={"Golongan Darah": "Kategori"})
+        )
+        if not df_goldar.empty:
+            st.altair_chart(chart_bar(df_goldar, f"{jenis} per Golongan Darah", warna), use_container_width=True)
 
 # =========================
-# DOWNLOAD EXCEL
+# 🏥 RS/KLINIK TUJUAN SIDE BY SIDE
 # =========================
+st.subheader("🏥 Distribusi per RS/Klinik Tujuan (Kiri-Kanan)")
+col1, col2 = st.columns(2)
+
+for jenis, col, warna in zip(["Permintaan", "Pemenuhan"], [col1, col2], [theme['permintaan_color'], theme['pemenuhan_color']]):
+    with col:
+        df_rs = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby("RS/Klinik Tujuan", as_index=False)["Jumlah"]
+            .sum()
+            .rename(columns={"RS/Klinik Tujuan": "Kategori"})
+            .sort_values("Jumlah", ascending=False)
+            .head(10)
+        )
+        if not df_rs.empty:
+            st.altair_chart(chart_bar(df_rs, f"{jenis} per RS/Klinik Tujuan (Top 10)", warna), use_container_width=True)
+
+# =========================
+# 📥 DOWNLOAD DATA
+# =========================
+st.subheader("📦 Download Data Terfilter")
 output = BytesIO()
 with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
     df_filtered.to_excel(writer, index=False, sheet_name="Data Terfilter")
@@ -253,17 +231,18 @@ with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
 st.download_button(
     label="⬇️ Download Data (Excel)",
     data=output.getvalue(),
-    file_name="Data_Dashboard_Darah_2025_2026.xlsx",
+    file_name="data_side_by_side_2025_2026.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
 # =========================
-# TABEL
+# 📋 TABEL DATA
 # =========================
 st.subheader("📋 Data Input (10 Baris per Halaman)")
 page_size = 10
 total_rows = len(df_filtered)
 total_pages = math.ceil(total_rows / page_size)
+
 if "page_number" not in st.session_state:
     st.session_state.page_number = 1
 
@@ -280,6 +259,11 @@ start_idx = (page_number - 1) * page_size
 end_idx = start_idx + page_size
 
 if total_rows > 0:
-    st.dataframe(df_filtered.iloc[start_idx:end_idx], use_container_width=True)
+    st.dataframe(df_filtered.iloc[start_idx:end_idx], use_container_width=True, height=380)
+    st.caption(f"📄 Halaman {page_number} dari {total_pages} | Menampilkan {start_idx+1}-{min(end_idx, total_rows)} dari {total_rows} baris.")
 else:
     st.warning("⚠️ Tidak ada data sesuai filter yang dipilih.")
+
+st.markdown("---")
+st.caption("📊 Dashboard Side-by-Side 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
+
