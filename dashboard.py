@@ -89,12 +89,17 @@ def load_data(url, tahun):
 df_2025 = load_data(urls[2025], 2025)
 df_2026 = load_data(urls[2026], 2026)
 df_all = pd.concat([df_2025, df_2026], ignore_index=True)
+df_all["Label Tahun"] = df_all["Tahun"].map(label_tahun)
 
 # =========================
 # 📆 PILIH TAHUN
 # =========================
 tahun_pilihan = st.sidebar.multiselect("📆 Pilih Tahun:", [2025, 2026], default=[2025, 2026])
 df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
+color=alt.Color(
+    "Label Tahun:N",
+    legend=alt.Legend(title="Sumber Data")
+)
 
 # =========================
 # 🎛️ FILTER DATA
@@ -270,6 +275,7 @@ else:
 
 st.markdown("---")
 st.caption("📊 Dashboard Side-by-Side 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
+
 
 
 
