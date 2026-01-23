@@ -59,6 +59,11 @@ st.markdown(f"""
         h1,h2,h3,h4 {{
             color: {theme['title_color']};
         }}
+        .grid{
+            display: grid;
+            gap: 16 px
+            grid-template-columns: repeat(
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -266,4 +271,5 @@ else:
 
 st.markdown("---")
 st.caption("📊 Dashboard Side-by-Side 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
+
 
