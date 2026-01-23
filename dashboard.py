@@ -69,6 +69,10 @@ urls = {
     2025: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsbaP26Ljsop1EwVXWEbgXrtf_K17_tK1TlFWWepUBF_eyt8Uhpnr5ua8JaYcsCQmz-JoZbwnbI-F/pub?gid=0&single=true&output=csv",
     2026: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=783347361&single=true&output=csv"
 }
+label_tahun = {
+    2025: "Data 2025",
+    2026: "Monitoring Pengimputan Nurmala Sari, A.Md.AK"
+}
 
 @st.cache_data(ttl=60)
 def load_data(url, tahun):
@@ -266,6 +270,7 @@ else:
 
 st.markdown("---")
 st.caption("📊 Dashboard Side-by-Side 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
+
 
 
 
