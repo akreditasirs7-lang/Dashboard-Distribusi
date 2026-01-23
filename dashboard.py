@@ -19,23 +19,6 @@ st.set_page_config(
 alt.data_transformers.disable_max_rows()
 
 # =========================
-# 🎨 TEMA
-# =========================
-st.sidebar.header("🎨 Tema")
-tema = st.sidebar.selectbox(
-    "Mode Tampilan:",
-    ["Merah–Ungu Soft", "Biru–Toska", "Dark Mode", "Kuning–Oranye"]
-)
-
-tema_style = {
-    "Merah–Ungu Soft": {"p": "#ff5f6d", "m": "#36cfc9"},
-    "Biru–Toska": {"p": "#ffcc00", "m": "#00ffff"},
-    "Dark Mode": {"p": "#ff7f0e", "m": "#1f77b4"},
-    "Kuning–Oranye": {"p": "#ff8c00", "m": "#f3722c"},
-}
-theme = tema_style[tema]
-
-# =========================
 # 📊 DATA SOURCE
 # =========================
 urls = {
@@ -63,7 +46,7 @@ df_all = pd.concat(
 )
 
 # =========================
-# 📆 FILTER TAHUN
+# 📆 FILTER TAHUN (LABEL)
 # =========================
 opsi_tahun = {
     "Data 2025": 2025,
@@ -80,37 +63,30 @@ tahun_pilih = [opsi_tahun[l] for l in label_pilih]
 df = df_all[df_all["Tahun"].isin(tahun_pilih)]
 
 # =========================
-# 🎛️ FILTER LAIN
+# 🎛️ FILTER BULAN
 # =========================
 bulan_list = sorted(df["Bulan"].dropna().unique())
-bulan_filter = st.sidebar.multiselect("Bulan", bulan_list, default=bulan_list)
+bulan_filter = st.sidebar.multiselect("🗓️ Bulan", bulan_list, default=bulan_list)
 df = df[df["Bulan"].isin(bulan_filter)]
-
-# =========================
-# 🧾 HEADER
-# =========================
-st.title("💉 Dashboard Monitoring Permintaan vs Pemenuhan")
-st.markdown("---")
 
 # =========================
 # 🧠 HELPER AUTO-HIDE
 # =========================
-def safe_chart(df, render_fn):
+def safe_chart(df, fn):
     if df.empty:
         st.info("ℹ️ Tidak ada data sesuai filter")
     else:
-        render_fn()
+        fn()
 
 # =========================
-# 📊 SIDE-BY-SIDE CHART
+# 📊 SIDE BY SIDE FUNCTION
 # =========================
 def side_by_side(df, kolom, judul):
     c1, c2 = st.columns(2)
-
     for jenis, col, warna in zip(
         ["Permintaan", "Pemenuhan"],
         [c1, c2],
-        [theme["p"], theme["m"]]
+        ["#ff5f6d", "#36cfc9"]
     ):
         with col:
             data = (
@@ -119,7 +95,6 @@ def side_by_side(df, kolom, judul):
                 .sum()
                 .rename(columns={kolom: "Kategori"})
             )
-
             safe_chart(
                 data,
                 lambda: st.altair_chart(
@@ -136,72 +111,89 @@ def side_by_side(df, kolom, judul):
             )
 
 # =========================
-# 📈 TREND BULANAN
+# 🧾 HEADER
 # =========================
-st.subheader("📈 Trend Bulanan")
+st.title("💉 Dashboard Monitoring Droping & Non Droping")
+st.markdown("---")
 
-trend = (
-    df.groupby(["Label Tahun", "Bulan", "Jenis Pengimputan"], as_index=False)["Jumlah"]
-    .sum()
-)
+# =========================
+# 🔀 LOOP DROPING / NON DROPING
+# =========================
+for jp in ["Droping", "Non Droping"]:
 
-safe_chart(
-    trend,
-    lambda: st.altair_chart(
-        alt.Chart(trend)
-        .mark_line(point=True)
-        .encode(
-            x="Bulan:N",
-            y="Jumlah:Q",
-            color="Label Tahun:N",
-            strokeDash="Jenis Pengimputan:N",
-            tooltip=["Label Tahun", "Jenis Pengimputan", "Bulan", "Jumlah"]
-        )
-        .properties(height=350),
-        use_container_width=True
+    st.markdown(f"## 🔹 {jp}")
+
+    df_jp = df[df["Jenis Permintaan"] == jp]
+
+    # ===== TREND =====
+    st.markdown("### 📈 Trend Bulanan")
+
+    trend = (
+        df_jp.groupby(
+            ["Label Tahun", "Bulan", "Jenis Pengimputan"],
+            as_index=False
+        )["Jumlah"].sum()
     )
-)
 
-# =========================
-# 📊 SIDE BY SIDE CHARTS
-# =========================
-st.subheader("🧪 Komponen")
-side_by_side(df, "Komponen", "Komponen")
+    safe_chart(
+        trend,
+        lambda: st.altair_chart(
+            alt.Chart(trend)
+            .mark_line(point=True)
+            .encode(
+                x="Bulan:N",
+                y="Jumlah:Q",
+                color="Label Tahun:N",
+                strokeDash="Jenis Pengimputan:N",
+                tooltip=["Label Tahun", "Jenis Pengimputan", "Bulan", "Jumlah"]
+            )
+            .properties(height=350),
+            use_container_width=True
+        )
+    )
 
-st.subheader("🩸 Golongan Darah")
-side_by_side(df, "Golongan Darah", "Golongan Darah")
+    # ===== SIDE BY SIDE =====
+    st.markdown("### 📊 Perbandingan Permintaan vs Pemenuhan")
 
-st.subheader("🧬 Rhesus")
-side_by_side(df, "Rhesus", "Rhesus")
+    st.markdown("#### 🧪 Komponen")
+    side_by_side(df_jp, "Komponen", "Komponen")
 
-st.subheader("🏥 RS / Klinik Tujuan")
-side_by_side(df, "RS/Klinik Tujuan", "RS/Klinik")
+    st.markdown("#### 🩸 Golongan Darah")
+    side_by_side(df_jp, "Golongan Darah", "Golongan Darah")
+
+    st.markdown("#### 🧬 Rhesus")
+    side_by_side(df_jp, "Rhesus", "Rhesus")
+
+    st.markdown("#### 🏥 RS / Klinik Tujuan")
+    side_by_side(df_jp, "RS/Klinik Tujuan", "RS/Klinik")
+
+    # ===== TABEL LENGKAP =====
+    st.markdown("### 📋 Data Lengkap")
+    st.dataframe(df_jp, use_container_width=True)
 
 # =========================
 # 🧾 EXPORT PDF (GRATIS)
 # =========================
-st.subheader("🧾 Export Laporan PDF")
+st.markdown("## 🧾 Export Laporan PDF")
 
-def generate_pdf(dataframe):
+def generate_pdf(df):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer)
     styles = getSampleStyleSheet()
-    elements = []
+    elems = []
 
-    elements.append(Paragraph("Laporan Monitoring Pengimputan Darah", styles["Title"]))
-    elements.append(Spacer(1, 12))
+    elems.append(Paragraph("Laporan Monitoring Droping & Non Droping", styles["Title"]))
+    elems.append(Spacer(1, 12))
 
-    total_perm = dataframe[dataframe["Jenis Pengimputan"] == "Permintaan"]["Jumlah"].sum()
-    total_pem = dataframe[dataframe["Jenis Pengimputan"] == "Pemenuhan"]["Jumlah"].sum()
+    for jp in ["Droping", "Non Droping"]:
+        sub = df[df["Jenis Permintaan"] == jp]
+        total = sub["Jumlah"].sum()
+        elems.append(Paragraph(f"{jp} - Total: {int(total)}", styles["Heading2"]))
 
-    elements.append(Paragraph(f"Total Permintaan: {int(total_perm)}", styles["Normal"]))
-    elements.append(Paragraph(f"Total Pemenuhan: {int(total_pem)}", styles["Normal"]))
-    elements.append(Spacer(1, 12))
+    table_data = [list(df.columns)] + df.head(20).values.tolist()
+    elems.append(Table(table_data))
 
-    table_data = [list(dataframe.columns)] + dataframe.head(20).values.tolist()
-    elements.append(Table(table_data))
-
-    doc.build(elements)
+    doc.build(elems)
     buffer.seek(0)
     return buffer
 
@@ -210,8 +202,8 @@ pdf = generate_pdf(df)
 st.download_button(
     "⬇️ Download Laporan PDF",
     pdf,
-    file_name="laporan_monitoring_pengimputan.pdf",
+    file_name="laporan_droping_non_droping.pdf",
     mime="application/pdf"
 )
 
-st.caption("📊 Dashboard Lanjutan | Streamlit Gratis | Auto-Hide + Side-by-Side + PDF")
+st.caption("📊 Dashboard Lengkap | Droping & Non Droping | Streamlit Gratis")
