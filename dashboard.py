@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from io import BytesIO
-import math
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
 from reportlab.lib.styles import getSampleStyleSheet
@@ -20,48 +19,52 @@ st.set_page_config(
 alt.data_transformers.disable_max_rows()
 
 # =========================
-# 📊 DATA SOURCE
+# 📊 DATA SOURCE (DIPISAH)
 # =========================
-urls = {
-    2025: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsbaP26Ljsop1EwVXWEbgXrtf_K17_tK1TlFWWepUBF_eyt8Uhpnr5ua8JaYcsCQmz-JoZbwnbI-F/pub?gid=0&single=true&output=csv",
-    2026: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=783347361&single=true&output=csv"
-}
-
-label_tahun = {
-    2025: "Data 2025",
-    2026: "Monitoring Pengimputan Nurmala Sari, A.Md.AK"
-}
+DATA_SOURCES = [
+    {
+        "label": "Data 2025",
+        "tahun": 2025,
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsbaP26Ljsop1EwVXWEbgXrtf_K17_tK1TlFWWepUBF_eyt8Uhpnr5ua8JaYcsCQmz-JoZbwnbI-F/pub?gid=0&single=true&output=csv"
+    },
+    {
+        "label": "Monitoring Pengimputan Nurmala Sari, A.Md.AK",
+        "tahun": 2026,
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=783347361&single=true&output=csv"
+    },
+    {
+        "label": "Data 2026",
+        "tahun": 2026,
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=0&single=true&output=csv"
+    }
+]
 
 @st.cache_data(ttl=120)
-def load_data(url, tahun):
-    df = pd.read_csv(url)
-    df = df.iloc[:, :10]
-    df.columns = df.columns.str.strip()
-    df["Tahun"] = tahun
-    df["Label Tahun"] = label_tahun[tahun]
-    return df
+def load_all_sources(sources):
+    frames = []
+    for src in sources:
+        df = pd.read_csv(src["url"])
+        df = df.iloc[:, :10]
+        df.columns = df.columns.str.strip()
+        df["Tahun"] = src["tahun"]
+        df["Label Tahun"] = src["label"]
+        frames.append(df)
+    return pd.concat(frames, ignore_index=True)
 
-df_all = pd.concat(
-    [load_data(urls[2025], 2025), load_data(urls[2026], 2026)],
-    ignore_index=True
-)
+df_all = load_all_sources(DATA_SOURCES)
 
 # =========================
-# 📆 FILTER TAHUN (LABEL)
+# 📆 FILTER LABEL TAHUN
 # =========================
-opsi_tahun = {
-    "Data 2025": 2025,
-    "Monitoring Pengimputan Nurmala Sari, A.Md.AK": 2026
-}
+label_opsi = df_all["Label Tahun"].unique().tolist()
 
 label_pilih = st.sidebar.multiselect(
     "📆 Pilih Sumber Data",
-    list(opsi_tahun.keys()),
-    default=list(opsi_tahun.keys())
+    label_opsi,
+    default=label_opsi
 )
 
-tahun_pilih = [opsi_tahun[l] for l in label_pilih]
-df = df_all[df_all["Tahun"].isin(tahun_pilih)]
+df = df_all[df_all["Label Tahun"].isin(label_pilih)]
 
 # =========================
 # 🎛️ FILTER BULAN
@@ -71,7 +74,7 @@ bulan_filter = st.sidebar.multiselect("🗓️ Bulan", bulan_list, default=bulan
 df = df[df["Bulan"].isin(bulan_filter)]
 
 # =========================
-# 🧠 HELPER AUTO-HIDE
+# 🧠 AUTO-HIDE
 # =========================
 def safe_chart(data, fn):
     if data.empty:
@@ -123,7 +126,6 @@ st.markdown("---")
 for jp in ["Droping", "Non Droping"]:
 
     st.markdown(f"## 🔹 {jp}")
-
     df_jp = df[df["Jenis Permintaan"] == jp]
 
     # ===== TREND =====
@@ -168,17 +170,16 @@ for jp in ["Droping", "Non Droping"]:
     st.markdown("#### 🏥 RS / Klinik Tujuan")
     side_by_side(df_jp, "RS/Klinik Tujuan", "RS/Klinik")
 
-    # ===== TABEL LENGKAP =====
     st.markdown("### 📋 Data Lengkap")
     st.dataframe(df_jp, use_container_width=True)
 
 # =========================
-# 🧾 DOWNLOAD SECTION
+# 🧾 DOWNLOAD
 # =========================
 st.markdown("---")
 st.subheader("🧾 Download Laporan")
 
-# ===== PDF LANDSCAPE =====
+# PDF LANDSCAPE
 def generate_pdf_landscape(df):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -198,11 +199,10 @@ def generate_pdf_landscape(df):
     )
     elements.append(Spacer(1, 12))
 
-    for jp in ["Droping", "Non Droping"]:
-        sub = df[df["Jenis Permintaan"] == jp]
-        total = sub["Jumlah"].sum()
+    for label in df["Label Tahun"].unique():
+        sub = df[df["Label Tahun"] == label]
         elements.append(
-            Paragraph(f"{jp} - Total Jumlah: {int(total)}", styles["Normal"])
+            Paragraph(f"{label} - Total: {int(sub['Jumlah'].sum())}", styles["Normal"])
         )
 
     elements.append(Spacer(1, 12))
@@ -213,11 +213,8 @@ def generate_pdf_landscape(df):
         "Golongan Darah", "Rhesus", "Jumlah"
     ]
 
-    data_pdf = df[kolom_pdf].copy()
-    table_data = [data_pdf.columns.tolist()] + data_pdf.values.tolist()
-
-    table = Table(table_data, repeatRows=1)
-    elements.append(table)
+    table_data = [kolom_pdf] + df[kolom_pdf].values.tolist()
+    elements.append(Table(table_data, repeatRows=1))
 
     doc.build(elements)
     buffer.seek(0)
@@ -232,7 +229,7 @@ st.download_button(
     "application/pdf"
 )
 
-# ===== EXCEL DATA LENGKAP =====
+# EXCEL LENGKAP
 excel_all = BytesIO()
 with pd.ExcelWriter(excel_all, engine="xlsxwriter") as writer:
     df.to_excel(writer, index=False, sheet_name="Data Lengkap")
@@ -244,21 +241,4 @@ st.download_button(
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-# ===== EXCEL TERPISAH =====
-excel_split = BytesIO()
-with pd.ExcelWriter(excel_split, engine="xlsxwriter") as writer:
-    df[df["Jenis Permintaan"] == "Droping"].to_excel(
-        writer, index=False, sheet_name="Droping"
-    )
-    df[df["Jenis Permintaan"] == "Non Droping"].to_excel(
-        writer, index=False, sheet_name="Non Droping"
-    )
-
-st.download_button(
-    "⬇️ Download Excel (Droping & Non Droping)",
-    excel_split.getvalue(),
-    "data_monitoring_droping_non_droping.xlsx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-st.caption("📊 Dashboard Final | Streamlit Gratis | Stabil & Siap Laporan")
+st.caption("📊 Dashboard Final | Data 2026 Dipisah | Streamlit Gratis | Stabil")
