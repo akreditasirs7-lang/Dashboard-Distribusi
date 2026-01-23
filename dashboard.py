@@ -4,226 +4,214 @@ import altair as alt
 from io import BytesIO
 import math
 
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.lib.styles import getSampleStyleSheet
+
 # =========================
 # ⚙️ KONFIGURASI DASAR
 # =========================
 st.set_page_config(
-    page_title="Dashboard Perbandingan Permintaan vs Pemenuhan 2025–2026",
+    page_title="Dashboard Monitoring Pengimputan",
     layout="wide",
     page_icon="💉"
 )
 
+alt.data_transformers.disable_max_rows()
+
 # =========================
-# 🎨 PILIHAN TEMA
+# 🎨 TEMA
 # =========================
-st.sidebar.header("🎨 Pilih Tema Dashboard")
+st.sidebar.header("🎨 Tema")
 tema = st.sidebar.selectbox(
     "Mode Tampilan:",
     ["Merah–Ungu Soft", "Biru–Toska", "Dark Mode", "Kuning–Oranye"]
 )
 
 tema_style = {
-    "Merah–Ungu Soft": {
-        "background": "linear-gradient(135deg, #f8cdda 0%, #1d2b64 100%)",
-        "text_color": "#fefefe",
-        "title_color": "#ffe5ec",
-        "permintaan_color": "#ff5f6d",
-        "pemenuhan_color": "#36cfc9",
-    },
-    "Biru–Toska": {
-        "background": "linear-gradient(135deg, #00b4db 0%, #0083b0 100%)",
-        "text_color": "#f9f9f9",
-        "title_color": "#e0ffff",
-        "permintaan_color": "#ffcc00",
-        "pemenuhan_color": "#00ffff",
-    },
-    "Dark Mode": {
-        "background": "#0e1117",
-        "text_color": "#fafafa",
-        "title_color": "#58a6ff",
-        "permintaan_color": "#ff7f0e",
-        "pemenuhan_color": "#1f77b4",
-    },
-    "Kuning–Oranye": {
-        "background": "linear-gradient(135deg, #f9d423 0%, #ff4e50 100%)",
-        "text_color": "#222",
-        "title_color": "#fff3cd",
-        "permintaan_color": "#ff8c00",
-        "pemenuhan_color": "#f3722c",
-    }
+    "Merah–Ungu Soft": {"p": "#ff5f6d", "m": "#36cfc9"},
+    "Biru–Toska": {"p": "#ffcc00", "m": "#00ffff"},
+    "Dark Mode": {"p": "#ff7f0e", "m": "#1f77b4"},
+    "Kuning–Oranye": {"p": "#ff8c00", "m": "#f3722c"},
 }
-
 theme = tema_style[tema]
 
-st.markdown(
-    f"""
-    <style>
-        html, body, [class*="css"] {{
-            background: {theme['background']} !important;
-            color: {theme['text_color']} !important;
-        }}
-        h1,h2,h3,h4 {{
-            color: {theme['title_color']};
-        }}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # =========================
-# 📊 DATA SOURCES
+# 📊 DATA SOURCE
 # =========================
 urls = {
     2025: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsbaP26Ljsop1EwVXWEbgXrtf_K17_tK1TlFWWepUBF_eyt8Uhpnr5ua8JaYcsCQmz-JoZbwnbI-F/pub?gid=0&single=true&output=csv",
     2026: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=783347361&single=true&output=csv"
 }
 
-# 🔹 LABEL TAHUN (INI YANG DITAMBAH)
 label_tahun = {
     2025: "Data 2025",
     2026: "Monitoring Pengimputan Nurmala Sari, A.Md.AK"
 }
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=120)
 def load_data(url, tahun):
     df = pd.read_csv(url)
     df = df.iloc[:, :10]
-    df.columns = [c.strip() for c in df.columns]
+    df.columns = df.columns.str.strip()
     df["Tahun"] = tahun
-    df["Label Tahun"] = label_tahun[tahun]  # ⬅️ TAMBAHAN AMAN
-
-    if "Bulan" in df.columns:
-        df["Periode"] = df["Bulan"].astype(str) + " " + df["Tahun"].astype(str)
-
-    if "Tanggal Droping" in df.columns:
-        df["Tanggal Droping"] = pd.to_datetime(df["Tanggal Droping"], errors="coerce")
-
+    df["Label Tahun"] = label_tahun[tahun]
     return df
 
-df_2025 = load_data(urls[2025], 2025)
-df_2026 = load_data(urls[2026], 2026)
-df_all = pd.concat([df_2025, df_2026], ignore_index=True)
+df_all = pd.concat(
+    [load_data(urls[2025], 2025), load_data(urls[2026], 2026)],
+    ignore_index=True
+)
 
 # =========================
-# 📆 PILIH TAHUN (PAKAI LABEL)
+# 📆 FILTER TAHUN
 # =========================
 opsi_tahun = {
     "Data 2025": 2025,
     "Monitoring Pengimputan Nurmala Sari, A.Md.AK": 2026
 }
 
-label_dipilih = st.sidebar.multiselect(
-    "📆 Pilih Sumber Data:",
-    options=list(opsi_tahun.keys()),
+label_pilih = st.sidebar.multiselect(
+    "📆 Pilih Sumber Data",
+    list(opsi_tahun.keys()),
     default=list(opsi_tahun.keys())
 )
 
-# konversi label → angka tahun (buat filter)
-tahun_pilihan = [opsi_tahun[label] for label in label_dipilih]
-
-df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
-
+tahun_pilih = [opsi_tahun[l] for l in label_pilih]
+df = df_all[df_all["Tahun"].isin(tahun_pilih)]
 
 # =========================
-# 🎛️ FILTER DATA
+# 🎛️ FILTER LAIN
 # =========================
-jenis_list = df["Jenis Permintaan"].dropna().unique().tolist()
-jenis_filter = st.sidebar.multiselect(
-    "Jenis Distribusi:",
-    jenis_list,
-    default=jenis_list
-)
-
-rs_list = sorted(df["RS/Klinik Tujuan"].dropna().unique().tolist())
-rs_filter = st.sidebar.multiselect(
-    "RS/Klinik Tujuan:",
-    rs_list,
-    default=rs_list
-)
-
-bulan_list = sorted(df["Bulan"].dropna().unique().tolist())
-bulan_filter = st.sidebar.multiselect(
-    "🗓️ Pilih Bulan:",
-    bulan_list,
-    default=bulan_list
-)
-
-df_filtered = df[
-    df["Jenis Permintaan"].isin(jenis_filter)
-    & df["RS/Klinik Tujuan"].isin(rs_filter)
-    & df["Bulan"].isin(bulan_filter)
-]
+bulan_list = sorted(df["Bulan"].dropna().unique())
+bulan_filter = st.sidebar.multiselect("Bulan", bulan_list, default=bulan_list)
+df = df[df["Bulan"].isin(bulan_filter)]
 
 # =========================
 # 🧾 HEADER
 # =========================
-st.title("💉 Dashboard Perbandingan Jenis Permintaan vs Pemenuhan (2025–2026)")
-st.markdown("#### 📊 Tampilan Kiri-Kanan untuk Analisis yang Lebih Jelas")
+st.title("💉 Dashboard Monitoring Permintaan vs Pemenuhan")
 st.markdown("---")
 
 # =========================
-# 📊 FUNGSI CHART
+# 🧠 HELPER AUTO-HIDE
 # =========================
-def chart_bar(df, title, color):
-    base = (
-        alt.Chart(df)
-        .mark_bar(color=color)
-        .encode(
-            x=alt.X("Kategori:N", sort='-y', title="Kategori"),
-            y=alt.Y("Jumlah:Q", title="Total Jumlah"),
-            tooltip=["Kategori", "Jumlah"]
-        )
-        .properties(width=430, height=350, title=title)
-    )
+def safe_chart(df, render_fn):
+    if df.empty:
+        st.info("ℹ️ Tidak ada data sesuai filter")
+    else:
+        render_fn()
 
-    text = (
-        alt.Chart(df)
-        .mark_text(dy=-8, color="#111", fontWeight="bold")
-        .encode(
-            x="Kategori:N",
-            y="Jumlah:Q",
-            text="Jumlah:Q"
-        )
-    )
+# =========================
+# 📊 SIDE-BY-SIDE CHART
+# =========================
+def side_by_side(df, kolom, judul):
+    c1, c2 = st.columns(2)
 
-    return base + text
+    for jenis, col, warna in zip(
+        ["Permintaan", "Pemenuhan"],
+        [c1, c2],
+        [theme["p"], theme["m"]]
+    ):
+        with col:
+            data = (
+                df[df["Jenis Pengimputan"] == jenis]
+                .groupby(kolom, as_index=False)["Jumlah"]
+                .sum()
+                .rename(columns={kolom: "Kategori"})
+            )
+
+            safe_chart(
+                data,
+                lambda: st.altair_chart(
+                    alt.Chart(data)
+                    .mark_bar(color=warna)
+                    .encode(
+                        x=alt.X("Kategori:N", sort="-y"),
+                        y="Jumlah:Q",
+                        tooltip=["Kategori", "Jumlah"]
+                    )
+                    .properties(title=f"{jenis} per {judul}", height=300),
+                    use_container_width=True
+                )
+            )
 
 # =========================
 # 📈 TREND BULANAN
 # =========================
-st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan")
+st.subheader("📈 Trend Bulanan")
 
-col1, col2 = st.columns(2)
+trend = (
+    df.groupby(["Label Tahun", "Bulan", "Jenis Pengimputan"], as_index=False)["Jumlah"]
+    .sum()
+)
 
-for jenis, col, warna in zip(
-    ["Permintaan", "Pemenuhan"],
-    [col1, col2],
-    [theme['permintaan_color'], theme['pemenuhan_color']]
-):
-    with col:
-        df_trend = (
-            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
-            .groupby(["Label Tahun", "Bulan"], as_index=False)["Jumlah"]
-            .sum()
+safe_chart(
+    trend,
+    lambda: st.altair_chart(
+        alt.Chart(trend)
+        .mark_line(point=True)
+        .encode(
+            x="Bulan:N",
+            y="Jumlah:Q",
+            color="Label Tahun:N",
+            strokeDash="Jenis Pengimputan:N",
+            tooltip=["Label Tahun", "Jenis Pengimputan", "Bulan", "Jumlah"]
         )
-
-        if not df_trend.empty:
-            chart = (
-                alt.Chart(df_trend)
-                .mark_line(point=True, color=warna)
-                .encode(
-                    x="Bulan:N",
-                    y="Jumlah:Q",
-                    color=alt.Color("Label Tahun:N", title="Sumber Data"),
-                    tooltip=["Label Tahun", "Bulan", "Jumlah"]
-                )
-                .properties(title=f"📊 Trend Bulanan {jenis}")
-            )
-
-            st.altair_chart(chart, use_container_width=True)
+        .properties(height=350),
+        use_container_width=True
+    )
+)
 
 # =========================
-# 📌 SELESAI
+# 📊 SIDE BY SIDE CHARTS
 # =========================
-st.caption("📊 Dashboard 2025–2026 | Label 2026 disesuaikan | Streamlit & Altair")
+st.subheader("🧪 Komponen")
+side_by_side(df, "Komponen", "Komponen")
 
+st.subheader("🩸 Golongan Darah")
+side_by_side(df, "Golongan Darah", "Golongan Darah")
+
+st.subheader("🧬 Rhesus")
+side_by_side(df, "Rhesus", "Rhesus")
+
+st.subheader("🏥 RS / Klinik Tujuan")
+side_by_side(df, "RS/Klinik Tujuan", "RS/Klinik")
+
+# =========================
+# 🧾 EXPORT PDF (GRATIS)
+# =========================
+st.subheader("🧾 Export Laporan PDF")
+
+def generate_pdf(dataframe):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph("Laporan Monitoring Pengimputan Darah", styles["Title"]))
+    elements.append(Spacer(1, 12))
+
+    total_perm = dataframe[dataframe["Jenis Pengimputan"] == "Permintaan"]["Jumlah"].sum()
+    total_pem = dataframe[dataframe["Jenis Pengimputan"] == "Pemenuhan"]["Jumlah"].sum()
+
+    elements.append(Paragraph(f"Total Permintaan: {int(total_perm)}", styles["Normal"]))
+    elements.append(Paragraph(f"Total Pemenuhan: {int(total_pem)}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
+    table_data = [list(dataframe.columns)] + dataframe.head(20).values.tolist()
+    elements.append(Table(table_data))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+pdf = generate_pdf(df)
+
+st.download_button(
+    "⬇️ Download Laporan PDF",
+    pdf,
+    file_name="laporan_monitoring_pengimputan.pdf",
+    mime="application/pdf"
+)
+
+st.caption("📊 Dashboard Lanjutan | Streamlit Gratis | Auto-Hide + Side-by-Side + PDF")
