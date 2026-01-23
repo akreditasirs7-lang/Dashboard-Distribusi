@@ -6,6 +6,7 @@ import math
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4, landscape
 
 # =========================
 # ⚙️ KONFIGURASI DASAR
@@ -72,16 +73,16 @@ df = df[df["Bulan"].isin(bulan_filter)]
 # =========================
 # 🧠 HELPER AUTO-HIDE
 # =========================
-def safe_chart(df, fn):
-    if df.empty:
+def safe_chart(data, fn):
+    if data.empty:
         st.info("ℹ️ Tidak ada data sesuai filter")
     else:
         fn()
 
 # =========================
-# 📊 SIDE BY SIDE FUNCTION
+# 📊 SIDE-BY-SIDE
 # =========================
-def side_by_side(df, kolom, judul):
+def side_by_side(df_src, kolom, judul):
     c1, c2 = st.columns(2)
     for jenis, col, warna in zip(
         ["Permintaan", "Pemenuhan"],
@@ -90,7 +91,7 @@ def side_by_side(df, kolom, judul):
     ):
         with col:
             data = (
-                df[df["Jenis Pengimputan"] == jenis]
+                df_src[df_src["Jenis Pengimputan"] == jenis]
                 .groupby(kolom, as_index=False)["Jumlah"]
                 .sum()
                 .rename(columns={kolom: "Kategori"})
@@ -117,7 +118,7 @@ st.title("💉 Dashboard Monitoring Droping & Non Droping")
 st.markdown("---")
 
 # =========================
-# 🔀 LOOP DROPING / NON DROPING
+# 🔀 DROPING & NON DROPING
 # =========================
 for jp in ["Droping", "Non Droping"]:
 
@@ -153,7 +154,7 @@ for jp in ["Droping", "Non Droping"]:
     )
 
     # ===== SIDE BY SIDE =====
-    st.markdown("### 📊 Perbandingan Permintaan vs Pemenuhan")
+    st.markdown("### 📊 Permintaan vs Pemenuhan")
 
     st.markdown("#### 🧪 Komponen")
     side_by_side(df_jp, "Komponen", "Komponen")
@@ -172,38 +173,92 @@ for jp in ["Droping", "Non Droping"]:
     st.dataframe(df_jp, use_container_width=True)
 
 # =========================
-# 🧾 EXPORT PDF (GRATIS)
+# 🧾 DOWNLOAD SECTION
 # =========================
-st.markdown("## 🧾 Export Laporan PDF")
+st.markdown("---")
+st.subheader("🧾 Download Laporan")
 
-def generate_pdf(df):
+# ===== PDF LANDSCAPE =====
+def generate_pdf_landscape(df):
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer)
-    styles = getSampleStyleSheet()
-    elems = []
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=20,
+        leftMargin=20,
+        topMargin=20,
+        bottomMargin=20
+    )
 
-    elems.append(Paragraph("Laporan Monitoring Droping & Non Droping", styles["Title"]))
-    elems.append(Spacer(1, 12))
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(
+        Paragraph("LAPORAN MONITORING DROPING & NON DROPING", styles["Title"])
+    )
+    elements.append(Spacer(1, 12))
 
     for jp in ["Droping", "Non Droping"]:
         sub = df[df["Jenis Permintaan"] == jp]
         total = sub["Jumlah"].sum()
-        elems.append(Paragraph(f"{jp} - Total: {int(total)}", styles["Heading2"]))
+        elements.append(
+            Paragraph(f"{jp} - Total Jumlah: {int(total)}", styles["Normal"])
+        )
 
-    table_data = [list(df.columns)] + df.head(20).values.tolist()
-    elems.append(Table(table_data))
+    elements.append(Spacer(1, 12))
 
-    doc.build(elems)
+    kolom_pdf = [
+        "Label Tahun", "Bulan", "Jenis Permintaan",
+        "Jenis Pengimputan", "Komponen",
+        "Golongan Darah", "Rhesus", "Jumlah"
+    ]
+
+    data_pdf = df[kolom_pdf].copy()
+    table_data = [data_pdf.columns.tolist()] + data_pdf.values.tolist()
+
+    table = Table(table_data, repeatRows=1)
+    elements.append(table)
+
+    doc.build(elements)
     buffer.seek(0)
     return buffer
 
-pdf = generate_pdf(df)
+pdf_buffer = generate_pdf_landscape(df)
 
 st.download_button(
-    "⬇️ Download Laporan PDF",
-    pdf,
-    file_name="laporan_droping_non_droping.pdf",
-    mime="application/pdf"
+    "⬇️ Download PDF (Landscape)",
+    pdf_buffer,
+    "laporan_monitoring_landscape.pdf",
+    "application/pdf"
 )
 
-st.caption("📊 Dashboard Lengkap | Droping & Non Droping | Streamlit Gratis")
+# ===== EXCEL DATA LENGKAP =====
+excel_all = BytesIO()
+with pd.ExcelWriter(excel_all, engine="xlsxwriter") as writer:
+    df.to_excel(writer, index=False, sheet_name="Data Lengkap")
+
+st.download_button(
+    "⬇️ Download Excel (Data Lengkap)",
+    excel_all.getvalue(),
+    "data_monitoring_lengkap.xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+# ===== EXCEL TERPISAH =====
+excel_split = BytesIO()
+with pd.ExcelWriter(excel_split, engine="xlsxwriter") as writer:
+    df[df["Jenis Permintaan"] == "Droping"].to_excel(
+        writer, index=False, sheet_name="Droping"
+    )
+    df[df["Jenis Permintaan"] == "Non Droping"].to_excel(
+        writer, index=False, sheet_name="Non Droping"
+    )
+
+st.download_button(
+    "⬇️ Download Excel (Droping & Non Droping)",
+    excel_split.getvalue(),
+    "data_monitoring_droping_non_droping.xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+st.caption("📊 Dashboard Final | Streamlit Gratis | Stabil & Siap Laporan")
