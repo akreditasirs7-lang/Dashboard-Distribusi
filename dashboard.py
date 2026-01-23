@@ -174,12 +174,12 @@ for jp in ["Droping", "Non Droping"]:
     st.dataframe(df_jp, use_container_width=True)
 
 # =========================
-# 🧾 DOWNLOAD
+# 🧾 DOWNLOAD (PDF + EXCEL)
 # =========================
 st.markdown("---")
 st.subheader("🧾 Download Laporan")
 
-# PDF LANDSCAPE
+# ===== PDF LANDSCAPE =====
 def generate_pdf_landscape(df):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -202,7 +202,7 @@ def generate_pdf_landscape(df):
     for label in df["Label Tahun"].unique():
         sub = df[df["Label Tahun"] == label]
         elements.append(
-            Paragraph(f"{label} - Total: {int(sub['Jumlah'].sum())}", styles["Normal"])
+            Paragraph(f"{label} - Total Jumlah: {int(sub['Jumlah'].sum())}", styles["Normal"])
         )
 
     elements.append(Spacer(1, 12))
@@ -229,7 +229,7 @@ st.download_button(
     "application/pdf"
 )
 
-# EXCEL LENGKAP
+# ===== EXCEL =====
 excel_all = BytesIO()
 with pd.ExcelWriter(excel_all, engine="xlsxwriter") as writer:
     df.to_excel(writer, index=False, sheet_name="Data Lengkap")
@@ -241,4 +241,4 @@ st.download_button(
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-st.caption("📊 Dashboard Final | Data 2026 Dipisah | Streamlit Gratis | Stabil")
+st.caption("📊 Dashboard Final | PDF Landscape Aktif | Streamlit Gratis")
