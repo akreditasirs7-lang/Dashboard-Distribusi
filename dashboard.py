@@ -94,7 +94,7 @@ df_all["Label Tahun"] = df_all["Tahun"].map(label_tahun)
 # =========================
 # 📆 PILIH TAHUN
 # =========================
-tahun_pilihan = st.sidebar.multiselect("📆 Pilih Tahun:", ["Data Tahun 2025", "Monitoring Pengimputan Nurmala Sari, A.Md.AK"], default=[2025, 2026])
+tahun_pilihan = st.sidebar.multiselect("📆 Pilih Tahun:", [2025,2026], default=[2025, 2026])
 df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
 
 # =========================
@@ -271,6 +271,7 @@ else:
 
 st.markdown("---")
 st.caption("📊 Dashboard Side-by-Side 2025–2026 | 💉 Jenis Permintaan vs Pemenuhan | Dibuat dengan ❤️ pakai Streamlit & Altair")
+
 
 
 
