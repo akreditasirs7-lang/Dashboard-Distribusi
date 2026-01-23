@@ -8,58 +8,48 @@ import math
 # ⚙️ KONFIGURASI DASAR
 # =========================
 st.set_page_config(
-    page_title="Dashboard Perbandingan Permintaan vs Pemenuhan",
+    page_title="Dashboard Perbandingan Permintaan vs Pemenuhan 2025–2026",
     layout="wide",
     page_icon="💉"
 )
 
 # =========================
-# 📱 DETEKSI MOBILE (AUTO COLLAPSE)
-# =========================
-is_mobile = st.session_state.get("is_mobile", False)
-st.session_state.is_mobile = st.sidebar.toggle(
-    "📱 Mode Mobile",
-    value=is_mobile,
-    help="Aktifkan jika dibuka dari HP"
-)
-
-# =========================
 # 🎨 PILIHAN TEMA
 # =========================
-st.sidebar.header("🎨 Tema")
+st.sidebar.header("🎨 Pilih Tema Dashboard")
 tema = st.sidebar.selectbox(
-    "Mode Tampilan",
+    "Mode Tampilan:",
     ["Merah–Ungu Soft", "Biru–Toska", "Dark Mode", "Kuning–Oranye"]
 )
 
 tema_style = {
     "Merah–Ungu Soft": {
         "background": "linear-gradient(135deg, #f8cdda 0%, #1d2b64 100%)",
-        "text": "#ffffff",
-        "title": "#ffe5ec",
-        "p": "#ff5f6d",
-        "m": "#36cfc9",
+        "text_color": "#fefefe",
+        "title_color": "#ffe5ec",
+        "permintaan_color": "#ff5f6d",
+        "pemenuhan_color": "#36cfc9",
     },
     "Biru–Toska": {
         "background": "linear-gradient(135deg, #00b4db 0%, #0083b0 100%)",
-        "text": "#ffffff",
-        "title": "#e0ffff",
-        "p": "#ffcc00",
-        "m": "#00ffff",
+        "text_color": "#f9f9f9",
+        "title_color": "#e0ffff",
+        "permintaan_color": "#ffcc00",
+        "pemenuhan_color": "#00ffff",
     },
     "Dark Mode": {
         "background": "#0e1117",
-        "text": "#fafafa",
-        "title": "#58a6ff",
-        "p": "#ff7f0e",
-        "m": "#1f77b4",
+        "text_color": "#fafafa",
+        "title_color": "#58a6ff",
+        "permintaan_color": "#ff7f0e",
+        "pemenuhan_color": "#1f77b4",
     },
     "Kuning–Oranye": {
         "background": "linear-gradient(135deg, #f9d423 0%, #ff4e50 100%)",
-        "text": "#222",
-        "title": "#fff3cd",
-        "p": "#ff8c00",
-        "m": "#f3722c",
+        "text_color": "#222",
+        "title_color": "#fff3cd",
+        "permintaan_color": "#ff8c00",
+        "pemenuhan_color": "#f3722c",
     }
 }
 
@@ -68,196 +58,162 @@ theme = tema_style[tema]
 st.markdown(
     f"""
     <style>
-    html, body {{
-        background: {theme['background']} !important;
-        color: {theme['text']} !important;
-    }}
-    h1,h2,h3 {{
-        color: {theme['title']} !important;
-    }}
+        html, body, [class*="css"] {{
+            background: {theme['background']} !important;
+            color: {theme['text_color']} !important;
+        }}
+        h1,h2,h3,h4 {{
+            color: {theme['title_color']};
+        }}
     </style>
     """,
     unsafe_allow_html=True
 )
 
 # =========================
-# 📊 DATA SOURCE
+# 📊 DATA SOURCES
 # =========================
 urls = {
-    2025: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsbaP26Ljsop1EwVXWEbgXrtf_K17_tK1TlFWWepUBF_eyt8Uhpnr5ua8JaYcsCQmz-JoZbwnbI-F/pub?output=csv",
-    2026: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?output=csv"
+    2025: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQsbaP26Ljsop1EwVXWEbgXrtf_K17_tK1TlFWWepUBF_eyt8Uhpnr5ua8JaYcsCQmz-JoZbwnbI-F/pub?gid=0&single=true&output=csv",
+    2026: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9OLoy-V3cVOvhF-pgwGuMatwEUO9m8S2COzp2C9o44UbWTZG4-PEZOhqCV13GnO24yL_p1UNj5h_c/pub?gid=783347361&single=true&output=csv"
 }
 
+# 🔹 LABEL TAHUN (INI YANG DITAMBAH)
 label_tahun = {
     2025: "Data 2025",
     2026: "Monitoring Pengimputan Nurmala Sari, A.Md.AK"
 }
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_data(url, tahun):
     df = pd.read_csv(url)
     df = df.iloc[:, :10]
-    df.columns = df.columns.str.strip()
+    df.columns = [c.strip() for c in df.columns]
     df["Tahun"] = tahun
-    df["Label Tahun"] = label_tahun[tahun]
+    df["Label Tahun"] = label_tahun[tahun]  # ⬅️ TAMBAHAN AMAN
+
+    if "Bulan" in df.columns:
+        df["Periode"] = df["Bulan"].astype(str) + " " + df["Tahun"].astype(str)
+
+    if "Tanggal Droping" in df.columns:
+        df["Tanggal Droping"] = pd.to_datetime(df["Tanggal Droping"], errors="coerce")
+
     return df
 
-df = pd.concat(
-    [load_data(urls[2025], 2025), load_data(urls[2026], 2026)],
-    ignore_index=True
+df_2025 = load_data(urls[2025], 2025)
+df_2026 = load_data(urls[2026], 2026)
+df_all = pd.concat([df_2025, df_2026], ignore_index=True)
+
+# =========================
+# 📆 PILIH TAHUN
+# =========================
+tahun_pilihan = st.sidebar.multiselect(
+    "📆 Pilih Tahun:",
+    [2025, 2026],
+    default=[2025, 2026]
 )
 
-# =========================
-# 🎛️ FILTER
-# =========================
-st.sidebar.header("🎛️ Filter Data")
+df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
 
-mode_view = st.sidebar.radio(
-    "📊 Mode Tampilan",
-    ["Chart + Table", "Chart Only", "Table Only"],
-    horizontal=True
+# =========================
+# 🎛️ FILTER DATA
+# =========================
+jenis_list = df["Jenis Permintaan"].dropna().unique().tolist()
+jenis_filter = st.sidebar.multiselect(
+    "Jenis Distribusi:",
+    jenis_list,
+    default=jenis_list
 )
 
-jenis = st.sidebar.multiselect(
-    "Jenis Distribusi",
-    df["Jenis Permintaan"].dropna().unique(),
-    default=df["Jenis Permintaan"].dropna().unique()
+rs_list = sorted(df["RS/Klinik Tujuan"].dropna().unique().tolist())
+rs_filter = st.sidebar.multiselect(
+    "RS/Klinik Tujuan:",
+    rs_list,
+    default=rs_list
 )
 
-df = df[df["Jenis Permintaan"].isin(jenis)]
+bulan_list = sorted(df["Bulan"].dropna().unique().tolist())
+bulan_filter = st.sidebar.multiselect(
+    "🗓️ Pilih Bulan:",
+    bulan_list,
+    default=bulan_list
+)
+
+df_filtered = df[
+    df["Jenis Permintaan"].isin(jenis_filter)
+    & df["RS/Klinik Tujuan"].isin(rs_filter)
+    & df["Bulan"].isin(bulan_filter)
+]
 
 # =========================
-# 👁️ TOGGLE PER CHART
+# 🧾 HEADER
 # =========================
-st.sidebar.header("🔘 Chart Control")
-
-show_trend = st.sidebar.checkbox("Trend Bulanan", value=not st.session_state.is_mobile)
-show_komponen = st.sidebar.checkbox("Komponen", value=True)
-show_goldar = st.sidebar.checkbox("Golongan Darah", value=True)
-show_rs = st.sidebar.checkbox("RS/Klinik", value=False)
+st.title("💉 Dashboard Perbandingan Jenis Permintaan vs Pemenuhan (2025–2026)")
+st.markdown("#### 📊 Tampilan Kiri-Kanan untuk Analisis yang Lebih Jelas")
+st.markdown("---")
 
 # =========================
-# 📊 FUNGSI CHART (OPTIMIZED)
+# 📊 FUNGSI CHART
 # =========================
-alt.data_transformers.disable_max_rows()
-
-def bar_chart(df, title, color):
-    return (
+def chart_bar(df, title, color):
+    base = (
         alt.Chart(df)
         .mark_bar(color=color)
         .encode(
-            x=alt.X("Kategori:N", sort="-y"),
-            y="Jumlah:Q",
+            x=alt.X("Kategori:N", sort='-y', title="Kategori"),
+            y=alt.Y("Jumlah:Q", title="Total Jumlah"),
             tooltip=["Kategori", "Jumlah"]
         )
-        .properties(height=300, title=title)
+        .properties(width=430, height=350, title=title)
     )
+
+    text = (
+        alt.Chart(df)
+        .mark_text(dy=-8, color="#111", fontWeight="bold")
+        .encode(
+            x="Kategori:N",
+            y="Jumlah:Q",
+            text="Jumlah:Q"
+        )
+    )
+
+    return base + text
 
 # =========================
 # 📈 TREND BULANAN
 # =========================
-if mode_view != "Table Only" and show_trend:
-    st.subheader("📈 Trend Bulanan")
+st.subheader("📈 Trend Bulanan Permintaan vs Pemenuhan")
 
-    data_trend = (
-        df.groupby(["Label Tahun", "Bulan", "Jenis Pengimputan"], as_index=False)
-        ["Jumlah"].sum()
-    )
+col1, col2 = st.columns(2)
 
-    chart = (
-        alt.Chart(data_trend)
-        .mark_line(point=True)
-        .encode(
-            x="Bulan:N",
-            y="Jumlah:Q",
-            color="Label Tahun:N",
-            tooltip=["Label Tahun", "Bulan", "Jumlah"]
+for jenis, col, warna in zip(
+    ["Permintaan", "Pemenuhan"],
+    [col1, col2],
+    [theme['permintaan_color'], theme['pemenuhan_color']]
+):
+    with col:
+        df_trend = (
+            df_filtered[df_filtered["Jenis Pengimputan"] == jenis]
+            .groupby(["Label Tahun", "Bulan"], as_index=False)["Jumlah"]
+            .sum()
         )
-        .properties(height=320)
-    )
 
-    st.altair_chart(chart, use_container_width=True)
+        if not df_trend.empty:
+            chart = (
+                alt.Chart(df_trend)
+                .mark_line(point=True, color=warna)
+                .encode(
+                    x="Bulan:N",
+                    y="Jumlah:Q",
+                    color=alt.Color("Label Tahun:N", title="Sumber Data"),
+                    tooltip=["Label Tahun", "Bulan", "Jumlah"]
+                )
+                .properties(title=f"📊 Trend Bulanan {jenis}")
+            )
 
-# =========================
-# 🧪 KOMPONEN
-# =========================
-if mode_view != "Table Only" and show_komponen:
-    st.subheader("🧪 Komponen")
-
-    data = (
-        df.groupby(["Komponen"], as_index=False)["Jumlah"].sum()
-        .rename(columns={"Komponen": "Kategori"})
-    )
-
-    st.altair_chart(bar_chart(data, "Distribusi Komponen", theme["p"]), use_container_width=True)
+            st.altair_chart(chart, use_container_width=True)
 
 # =========================
-# 🩸 GOLONGAN DARAH
+# 📌 SELESAI
 # =========================
-if mode_view != "Table Only" and show_goldar:
-    st.subheader("🩸 Golongan Darah")
-
-    data = (
-        df.groupby("Golongan Darah", as_index=False)["Jumlah"].sum()
-        .rename(columns={"Golongan Darah": "Kategori"})
-    )
-
-    st.altair_chart(bar_chart(data, "Golongan Darah", theme["m"]), use_container_width=True)
-
-# =========================
-# 🏥 RS / KLINIK
-# =========================
-if mode_view != "Table Only" and show_rs:
-    st.subheader("🏥 RS / Klinik Tujuan")
-
-    data = (
-        df.groupby("RS/Klinik Tujuan", as_index=False)["Jumlah"].sum()
-        .rename(columns={"RS/Klinik Tujuan": "Kategori"})
-        .sort_values("Jumlah", ascending=False)
-        .head(10)
-    )
-
-    st.altair_chart(bar_chart(data, "Top 10 RS/Klinik", theme["p"]), use_container_width=True)
-
-# =========================
-# 📋 TABLE
-# =========================
-if mode_view != "Chart Only":
-    st.subheader("📋 Data Tabel")
-
-    page_size = 10
-    total = len(df)
-    pages = math.ceil(total / page_size)
-
-    if "page" not in st.session_state:
-        st.session_state.page = 1
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("⬅️ Prev") and st.session_state.page > 1:
-            st.session_state.page -= 1
-    with col2:
-        if st.button("Next ➡️") and st.session_state.page < pages:
-            st.session_state.page += 1
-
-    start = (st.session_state.page - 1) * page_size
-    end = start + page_size
-
-    st.dataframe(df.iloc[start:end], use_container_width=True)
-    st.caption(f"Halaman {st.session_state.page} / {pages}")
-
-# =========================
-# 📥 DOWNLOAD
-# =========================
-output = BytesIO()
-with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-    df.to_excel(writer, index=False)
-
-st.download_button(
-    "⬇️ Download Excel",
-    output.getvalue(),
-    "dashboard_filtered.xlsx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-st.caption("💉 Dashboard Streamlit | Optimized & Mobile Ready")
+st.caption("📊 Dashboard 2025–2026 | Label 2026 disesuaikan | Streamlit & Altair")
