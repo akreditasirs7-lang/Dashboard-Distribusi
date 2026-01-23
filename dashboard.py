@@ -105,15 +105,24 @@ df_2026 = load_data(urls[2026], 2026)
 df_all = pd.concat([df_2025, df_2026], ignore_index=True)
 
 # =========================
-# 📆 PILIH TAHUN
+# 📆 PILIH TAHUN (PAKAI LABEL)
 # =========================
-tahun_pilihan = st.sidebar.multiselect(
-    "📆 Pilih Tahun:",
-    [2025, 2026],
-    default=[2025, 2026]
+opsi_tahun = {
+    "Data 2025": 2025,
+    "Monitoring Pengimputan Nurmala Sari, A.Md.AK": 2026
+}
+
+label_dipilih = st.sidebar.multiselect(
+    "📆 Pilih Sumber Data:",
+    options=list(opsi_tahun.keys()),
+    default=list(opsi_tahun.keys())
 )
 
+# konversi label → angka tahun (buat filter)
+tahun_pilihan = [opsi_tahun[label] for label in label_dipilih]
+
 df = df_all[df_all["Tahun"].isin(tahun_pilihan)]
+
 
 # =========================
 # 🎛️ FILTER DATA
@@ -217,3 +226,4 @@ for jenis, col, warna in zip(
 # 📌 SELESAI
 # =========================
 st.caption("📊 Dashboard 2025–2026 | Label 2026 disesuaikan | Streamlit & Altair")
+
